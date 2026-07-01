@@ -1,0 +1,12 @@
+version: 0.1.0
+adapter_contract:
+  required_operations:
+    - connect
+    - disconnect
+    - move_axis
+    - stop_all
+    - read_status
+  optional_operations:
+    - capture_frame
+    - reset_device
+    - calibrate

@@ -1,0 +1,5 @@
+flask
+gpiozero
+numpy
+opencv-python
+Pillow

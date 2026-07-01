@@ -1,0 +1,17 @@
+version: 0.1.0
+commands:
+  move:
+    description: Move the claw on one axis for a bounded duration.
+    fields:
+      axis: [x, y, z]
+      direction: [positive, negative]
+      duration_ms: integer
+  stop:
+    description: Stop all claw motion immediately.
+  drop:
+    description: Run the claw drop sequence.
+telemetry:
+  machine_state:
+    values: [idle, playing, dropping, fault, maintenance]
+  safety_state:
+    values: [ok, warning, emergency_stop]

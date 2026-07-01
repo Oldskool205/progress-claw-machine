@@ -1,0 +1,20 @@
+project:
+  name: Progress Claw OS
+  version: 1.0.0
+  phase: 2
+  environment: development
+
+controller:
+  active_adapter: mock
+
+camera:
+  enabled: false
+
+arduino:
+  enabled: false
+
+dashboard:
+  enabled: false
+
+ai:
+  enabled: false

@@ -1,0 +1,7 @@
+path: /home/araya/Projects/Progress-Claw-OS/ai/training/yolo_people/dataset
+train: images/train
+val: images/val
+test: images/test
+
+names:
+  0: person

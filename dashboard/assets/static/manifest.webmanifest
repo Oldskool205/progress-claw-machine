@@ -1,0 +1,18 @@
+{
+  "name": "Claw Control Dashboard",
+  "short_name": "Claw Control",
+  "description": "Local offline-ready claw machine dashboard.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#07131d",
+  "theme_color": "#19d9ff",
+  "icons": [
+    {
+      "src": "/static/images/steaming-club-logo.jpg",
+      "sizes": "192x192",
+      "type": "image/jpeg",
+      "purpose": "any"
+    }
+  ]
+}
