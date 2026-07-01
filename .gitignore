@@ -1,0 +1,129 @@
+# Python cache and tooling
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Environment, secrets, and local config
+.env
+.env.*
+!.env.example
+*.secret
+*.secrets
+*.key
+*.pem
+*.crt
+*.p12
+secrets/
+config/secrets/
+config/secrets.local/
+
+# Logs and runtime files
+*.log
+logs/
+data/logs/*
+!data/logs/.gitkeep
+system/logs/*
+!system/logs/.gitkeep
+*.pid
+*.pid.lock
+*.sqlite
+*.sqlite3
+*.db
+
+# Raspberry Pi and service runtime
+*.service.local
+*.timer.local
+*.socket.local
+*.bak
+*.tmp
+*.temp
+
+# Node, Vite, and dashboard artifacts
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.npm/
+.pnpm-store/
+.vite/
+dashboard/**/node_modules/
+dashboard/**/dist/
+dashboard/**/build/
+dashboard/**/.vite/
+
+# Build and packaging artifacts
+build/
+dist/
+*.egg-info/
+site/
+
+# Arduino build products
+*.hex
+*.elf
+*.bin
+*.map
+*.eep
+*.lst
+*.o
+*.d
+
+# Camera recordings, captures, and generated media
+recordings/
+captures/
+camera/recordings/
+camera/captures/
+camera/snapshots/*
+!camera/snapshots/.gitkeep
+data/raw/*
+!data/raw/.gitkeep
+data/captures/
+data/recordings/
+data/snapshots/*
+!data/snapshots/.gitkeep
+*.mp4
+*.mov
+*.avi
+*.mkv
+*.h264
+*.jpg
+*.jpeg
+*.png
+*.webp
+!docs/**/*.png
+!docs/**/*.jpg
+!docs/**/*.jpeg
+!docs/**/*.webp
+
+# AI / YOLO generated model weights and exports
+*.pt
+*.onnx
+*.engine
+*.tflite
+*.pb
+*.weights
+ai/**/runs/
+ai/**/exports/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
