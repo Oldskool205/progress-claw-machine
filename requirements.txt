@@ -3,3 +3,4 @@ gpiozero
 numpy
 opencv-python
 Pillow
+pyserial

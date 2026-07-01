@@ -4,7 +4,6 @@
 import os
 import base64
 import binascii
-import glob
 import json
 from io import BytesIO
 import subprocess
@@ -17,18 +16,20 @@ from flask import Flask, Response, jsonify, render_template, request, send_from_
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
+from controller import RuntimeController
+from controller.models import ClawPowerCommand, EmergencyStopCommand, PlayStartCommand, PlayStopCommand
+from controller.safety.validator import SafetyError
+from services.logging.structured import configure_logging
+
 try:
     import cv2
 except ImportError:
     cv2 = None
 
-try:
-    from gpiozero import OutputDevice
-except ImportError:
-    OutputDevice = None
 
-
+configure_logging()
 app = Flask(__name__)
+runtime_controller = RuntimeController.from_env()
 lock = threading.Lock()
 PLAYER_PHOTO_PATH = os.path.join(app.static_folder, "images", "current-player.jpg")
 PLAYER_HISTORY_DIR = os.path.join(app.static_folder, "images", "players")
@@ -37,12 +38,6 @@ YOLO_RAW_PHOTO_DIR = os.getenv(
     "/home/araya/Projects/Progress-Claw-OS/ai/training/yolo_people/raw_photos",
 )
 
-START_GPIO_PIN = int(os.getenv("CLAW_START_GPIO", "17"))
-GRABBER_POWER_GPIO_PINS = tuple(
-    int(pin.strip())
-    for pin in os.getenv("CLAW_GRABBER_POWER_GPIOS", "22,23,24").split(",")
-    if pin.strip()
-)
 MIN_PLAY_DURATION_SECONDS = 10
 MAX_PLAY_DURATION_SECONDS = 180
 MIN_GRABBER_POWER_PERCENT = 40
@@ -61,14 +56,7 @@ GRABBER_POWER_PERCENT = max(
 READY_DURATION_SECONDS = int(os.getenv("CLAW_READY_DURATION_SECONDS", "3"))
 GRABBER_START_DURATION_SECONDS = int(os.getenv("CLAW_GRABBER_START_SECONDS", "6"))
 USB_CAMERA_DEVICE = os.getenv("CLAW_USB_CAMERA_DEVICE", "/dev/video0")
-ARDUINO_DEVICE = os.getenv("CLAW_ARDUINO_DEVICE", "/dev/ttyUSB0")
 HACKER_UNLOCK_PASSWORD = os.getenv("CLAW_HACKER_PASSWORD", "1234")
-ARDUINO_DEVICE_PATTERNS = (
-    ARDUINO_DEVICE,
-    "/dev/ttyUSB*",
-    "/dev/ttyACM*",
-    "/dev/serial/by-id/*",
-)
 PLAYER_NAME_FONT = "/usr/share/fonts/truetype/lato/Lato-Heavy.ttf"
 
 state = {
@@ -110,7 +98,29 @@ camera_condition = threading.Condition()
 
 
 def dashboard_state(**extra):
-    return {**state, "events": list(events), **extra}
+    controller_status = runtime_controller.status()
+    state["arduino_connected"] = controller_status["arduino_connected"]
+    state["machine_enabled"] = controller_status["machine_enabled"]
+    state["grabber_power_percent"] = controller_status["claw_power_percent"]
+    if controller_status["emergency_stopped"]:
+        state["machine_status"] = "Emergency stopped"
+    elif controller_status["running"]:
+        state["machine_status"] = "Running"
+    elif controller_status["status"] == "fault":
+        state["machine_status"] = "Fault"
+    elif state["play_mode"] is None:
+        state["machine_status"] = "Ready"
+    return {
+        **state,
+        "events": list(events),
+        "controller": controller_status,
+        **extra,
+    }
+
+
+def controller_error_response(error):
+    add_event(str(error), "warning")
+    return jsonify(dashboard_state(ok=False, error=str(error))), 409
 
 
 def reject_when_hacker_mode():
@@ -236,13 +246,6 @@ def save_yolo_raw_photo(frame, player_name, captured_at, source, people_count):
     return image_path
 
 
-def arduino_device_available():
-    for pattern in ARDUINO_DEVICE_PATTERNS:
-        if glob.glob(pattern):
-            return True
-    return False
-
-
 def grabber_power_level(percent):
     percent = max(
         MIN_GRABBER_POWER_PERCENT,
@@ -294,85 +297,28 @@ def set_ai_people_count(value):
 
 
 def initialize_grabber_power_outputs(log_event=True):
-    global grabber_power_outputs
-    if len(GRABBER_POWER_GPIO_PINS) != 3:
-        if log_event:
-            add_event("Grabber power GPIO setting must contain 3 pins", "warning")
-        grabber_power_outputs = []
-        return False
-    if OutputDevice is None:
-        return False
-    try:
-        grabber_power_outputs = [
-            OutputDevice(pin, active_high=True, initial_value=False)
-            for pin in GRABBER_POWER_GPIO_PINS
-        ]
-        apply_grabber_power_outputs()
-        if log_event:
-            add_event(
-                "Grabber power control ready on GPIO "
-                + ",".join(str(pin) for pin in GRABBER_POWER_GPIO_PINS),
-                "success",
-            )
-        return True
-    except Exception as error:
-        grabber_power_outputs = []
-        if log_event:
-            add_event(f"Grabber power GPIO unavailable: {error}", "warning")
-        return False
+    if log_event:
+        add_event("Grabber power is managed by controller runtime", "info")
+    return True
 
 
 def apply_grabber_power_outputs():
-    if len(grabber_power_outputs) != 3:
-        return False
-    level = grabber_power_level(refresh_effective_grabber_power())
-    for index, output in enumerate(grabber_power_outputs):
-        if level & (1 << index):
-            output.on()
-        else:
-            output.off()
+    percent = refresh_effective_grabber_power()
+    runtime_controller.set_claw_power(ClawPowerCommand(power_percent=percent))
     return True
 
 
 def initialize_start_output(log_event=True):
-    global start_output
-    if OutputDevice is None:
-        if log_event:
-            add_event("GPIO library is unavailable", "warning")
-        return False
-    try:
-        # Active-low: idle is 3.3 V and a play request briefly pulls the line low.
-        start_output = OutputDevice(
-            START_GPIO_PIN,
-            active_high=False,
-            initial_value=False,
-        )
-        if not grabber_power_outputs:
-            initialize_grabber_power_outputs(log_event=log_event)
-        state["arduino_connected"] = arduino_device_available()
-        if log_event:
-            if state["arduino_connected"]:
-                add_event(
-                    f"Arduino start control ready on GPIO {START_GPIO_PIN}",
-                    "success",
-                )
-            else:
-                add_event("Arduino USB device is disconnected", "warning")
-        return True
-    except Exception as error:
-        start_output = None
-        state["arduino_connected"] = False
-        if log_event:
-            add_event(f"GPIO start control unavailable: {error}", "warning")
-        return False
+    controller_status = runtime_controller.status()
+    state["arduino_connected"] = controller_status["arduino_connected"]
+    if log_event:
+        add_event("Arduino access is managed by controller runtime", "info")
+    return True
 
 
 def refresh_arduino_connection():
-    if start_output is None and not initialize_start_output(log_event=False):
-        return False
-    if not grabber_power_outputs:
-        initialize_grabber_power_outputs(log_event=False)
-    state["arduino_connected"] = arduino_device_available()
+    controller_status = runtime_controller.status()
+    state["arduino_connected"] = controller_status["arduino_connected"]
     return state["arduino_connected"]
 
 
@@ -408,31 +354,26 @@ def run_play_window(generation, duration):
 
 
 def trigger_play(duration):
-    global play_generation
-    play_generation += 1
-    generation = play_generation
-    threading.Thread(
-        target=run_play_window,
-        args=(generation, duration),
-        daemon=True,
-    ).start()
-    return state["arduino_connected"] and start_output is not None
+    result = runtime_controller.start_play(
+        PlayStartCommand(
+            duration_seconds=duration,
+            source="dashboard",
+            test_mode=state["play_mode"] == "test",
+        )
+    )
+    return not result["mock_arduino"]
 
 
 def release_start_output():
-    if start_output is None:
-        return
-    try:
-        start_output.off()
-    except Exception as error:
-        state["arduino_connected"] = False
-        add_event(f"GPIO stop signal failed: {error}", "warning")
+    if runtime_controller.status()["running"]:
+        runtime_controller.stop_play(PlayStopCommand(source="dashboard"))
 
 
 def stop_play(message):
     global play_generation
     play_generation += 1
-    release_start_output()
+    if runtime_controller.status()["running"]:
+        runtime_controller.stop_play(PlayStopCommand(source="dashboard", reason=message))
     state["machine_status"] = "Ready"
     state["play_mode"] = None
     state["countdown_starts_at"] = None
@@ -581,6 +522,89 @@ def status():
         return jsonify(dashboard_state())
 
 
+@app.route("/api/play/start", methods=["POST"])
+def api_play_start():
+    data = request.get_json(silent=True) or {}
+    duration = play_duration_seconds(data.get("duration_seconds", state["play_duration"]))
+    command = PlayStartCommand(
+        duration_seconds=duration,
+        source=data.get("source", "dashboard"),
+        test_mode=bool(data.get("test", False)),
+    )
+    with lock:
+        try:
+            result = runtime_controller.start_play(command)
+        except SafetyError as error:
+            return controller_error_response(error)
+        state["play_mode"] = "test" if command.test_mode else "play"
+        state["play_duration"] = duration
+        state["countdown_starts_at"] = time.time()
+        state["play_ends_at"] = result["play_ends_at"]
+        state["machine_status"] = "Running"
+        add_event("Controller play started", "success")
+        return jsonify(dashboard_state(ok=True))
+
+
+@app.route("/api/play/stop", methods=["POST"])
+def api_play_stop():
+    data = request.get_json(silent=True) or {}
+    with lock:
+        try:
+            runtime_controller.stop_play(
+                PlayStopCommand(
+                    source=data.get("source", "dashboard"),
+                    reason=data.get("reason", "operator_stop"),
+                )
+            )
+        except SafetyError as error:
+            return controller_error_response(error)
+        state["play_mode"] = None
+        state["countdown_starts_at"] = None
+        state["play_ends_at"] = None
+        state["machine_status"] = "Ready"
+        add_event("Controller play stopped", "warning")
+        return jsonify(dashboard_state(ok=True))
+
+
+@app.route("/api/claw/power", methods=["POST"])
+def api_claw_power():
+    data = request.get_json(silent=True) or {}
+    if "power_percent" not in data:
+        return jsonify({"ok": False, "error": "Missing power_percent"}), 400
+    with lock:
+        try:
+            result = runtime_controller.set_claw_power(
+                ClawPowerCommand(
+                    power_percent=int(data["power_percent"]),
+                    source=data.get("source", "dashboard"),
+                )
+            )
+        except (SafetyError, ValueError) as error:
+            return controller_error_response(error)
+        state["manual_grabber_power_percent"] = result["claw_power_percent"]
+        state["grabber_power_percent"] = result["claw_power_percent"]
+        add_event(f"Claw power set to {result['claw_power_percent']}%")
+        return jsonify(dashboard_state(ok=True))
+
+
+@app.route("/api/emergency-stop", methods=["POST"])
+def api_emergency_stop():
+    data = request.get_json(silent=True) or {}
+    with lock:
+        runtime_controller.emergency_stop(
+            EmergencyStopCommand(
+                source=data.get("source", "dashboard"),
+                reason=data.get("reason", "emergency_stop"),
+            )
+        )
+        state["play_mode"] = None
+        state["countdown_starts_at"] = None
+        state["play_ends_at"] = None
+        state["machine_status"] = "Emergency stopped"
+        add_event("Emergency stop activated", "warning")
+        return jsonify(dashboard_state(ok=True))
+
+
 @app.route("/api/count", methods=["POST"])
 def update_count():
     data = request.get_json(silent=True) or {}
@@ -612,16 +636,25 @@ def settings():
                 data["grabber_power_percent"]
             )
             refresh_effective_grabber_power()
-            apply_grabber_power_outputs()
+            try:
+                apply_grabber_power_outputs()
+            except SafetyError as error:
+                return controller_error_response(error)
         if "grabber_power_mode" in data:
             try:
                 set_grabber_power_mode(data["grabber_power_mode"])
             except ValueError as error:
                 return jsonify({"ok": False, "error": str(error)}), 400
-            apply_grabber_power_outputs()
+            try:
+                apply_grabber_power_outputs()
+            except SafetyError as error:
+                return controller_error_response(error)
         if "ai_people_count" in data:
             set_ai_people_count(data["ai_people_count"])
-            apply_grabber_power_outputs()
+            try:
+                apply_grabber_power_outputs()
+            except SafetyError as error:
+                return controller_error_response(error)
         if "machine_enabled" in data:
             state["machine_enabled"] = bool(data["machine_enabled"])
             if not state["machine_enabled"] and state["play_mode"] is not None:
@@ -640,7 +673,10 @@ def ai_count():
         if "people" not in data:
             return jsonify({"ok": False, "error": "Missing people count"}), 400
         set_ai_people_count(data["people"])
-        apply_grabber_power_outputs()
+        try:
+            apply_grabber_power_outputs()
+        except SafetyError as error:
+            return controller_error_response(error)
         add_event(
             "AI count updated: "
             f"{state['ai_people_count']} people -> "
@@ -725,7 +761,10 @@ def player_photo():
         state["current_player_name"] = player_name
         if people_count is not None:
             set_ai_people_count(people_count)
-            apply_grabber_power_outputs()
+            try:
+                apply_grabber_power_outputs()
+            except SafetyError as error:
+                return controller_error_response(error)
         state["players"].insert(
             0,
             {
@@ -800,7 +839,10 @@ def capture_player():
         state["current_player_name"] = player_name
         if people_count is not None:
             set_ai_people_count(people_count)
-            apply_grabber_power_outputs()
+            try:
+                apply_grabber_power_outputs()
+            except SafetyError as error:
+                return controller_error_response(error)
         state["players"].insert(
             0,
             {
@@ -867,7 +909,13 @@ def play():
             state["machine_status"] = "Getting ready"
         else:
             state["machine_status"] = "Test simulation" if test_mode else "Simulation"
-        sent = trigger_play(play_duration)
+        try:
+            sent = trigger_play(play_duration)
+        except SafetyError as error:
+            state["play_mode"] = None
+            state["countdown_starts_at"] = None
+            state["play_ends_at"] = None
+            return controller_error_response(error)
         label = "Test play" if test_mode else "Play"
         add_event(
             f"{label} activated" + ("" if sent else " (simulation mode)"),
@@ -884,7 +932,10 @@ def stop():
             return locked_response
         if state["play_mode"] is None:
             return jsonify({"ok": False, "error": "Machine is not running"}), 409
-        stop_play("Machine stopped from dashboard")
+        try:
+            stop_play("Machine stopped from dashboard")
+        except SafetyError as error:
+            return controller_error_response(error)
         return jsonify(dashboard_state(ok=True))
 
 

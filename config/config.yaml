@@ -1,20 +1,23 @@
 project:
   name: Progress Claw OS
   version: 1.0.0
-  phase: 2
+  phase: 4
   environment: development
 
 controller:
-  active_adapter: mock
+  active_adapter: arduino
+  safety_boundary: true
 
 camera:
   enabled: false
 
 arduino:
-  enabled: false
+  enabled: true
+  mock_when_disconnected: true
+  baud_rate: 115200
 
 dashboard:
-  enabled: false
+  enabled: true
 
 ai:
   enabled: false
