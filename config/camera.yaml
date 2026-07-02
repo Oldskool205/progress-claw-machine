@@ -1,0 +1,7 @@
+# Vision Service camera configuration
+resolution: 1280x720
+fps: 30
+device_id: 0
+rotation: 0
+mirror: false
+reconnect_delay_seconds: 2
