@@ -5,7 +5,7 @@ from flask import Flask
 
 from game.events import create_game_state_blueprint
 from game.state_engine import GameStateConfig, GameStateEngine
-from vision.detection_cache import DetectionCache
+from vision.detection_cache import DetectionCache, shared_detection_cache
 from vision.detection_models import DetectedObject
 
 
@@ -57,6 +57,26 @@ class GameStateApiTest(unittest.TestCase):
         payload = response.get_json()
         self.assertIn("events", payload)
         self.assertGreaterEqual(len(payload["events"]), 1)
+
+    def test_dashboard_game_state_reads_shared_vision_detection_cache(self):
+        from dashboard.backend.app import app, game_detection_cache
+
+        cache = shared_detection_cache()
+        self.assertIs(game_detection_cache, cache)
+        cache.clear()
+        cache.update(
+            timestamp=time.time(),
+            frame_id=99,
+            objects=[DetectedObject("person", 0.96, [1, 1, 2, 2], time.time())],
+        )
+
+        response = app.test_client().get("/game/state")
+        cache.clear()
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertEqual(payload["state"], "PLAYER_PRESENT")
+        self.assertEqual(payload["details"]["frame_id"], 99)
 
 
 if __name__ == "__main__":

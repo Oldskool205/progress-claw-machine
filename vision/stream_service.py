@@ -11,7 +11,7 @@ from flask import Blueprint, Flask, Response
 
 from services.logging.structured import configure_logging
 from vision.camera_manager import CameraManager, load_camera_config
-from vision.detection_cache import DetectionCache
+from vision.detection_cache import DetectionCache, shared_detection_cache
 from vision.detection_service import DetectionService, create_detection_blueprint
 from vision.detector import YoloDetector, load_detector_config
 from vision.frame_queue import FrameQueue
@@ -85,7 +85,7 @@ def create_app(
             Path(os.getenv("CLAW_CAMERA_CONFIG", "config/camera.yaml"))
         ),
     )
-    cache = detection_cache or DetectionCache()
+    cache = detection_cache or shared_detection_cache()
     detector_service = detection_service or DetectionService(
         queue,
         detector=YoloDetector(

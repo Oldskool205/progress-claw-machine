@@ -40,3 +40,10 @@ class DetectionCache:
 
     def to_dict(self) -> dict[str, object]:
         return self.latest().to_dict()
+
+
+_SHARED_DETECTION_CACHE = DetectionCache()
+
+
+def shared_detection_cache() -> DetectionCache:
+    return _SHARED_DETECTION_CACHE
