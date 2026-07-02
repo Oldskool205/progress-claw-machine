@@ -23,7 +23,11 @@ class SafetyValidator:
             raise SafetyError("Machine is disabled")
         if state.play_mode is not None:
             raise SafetyError("Machine is already running")
-        if not self.min_play_seconds <= int(command.duration_seconds) <= self.max_play_seconds:
+        if (
+            not self.min_play_seconds
+            <= int(command.duration_seconds)
+            <= self.max_play_seconds
+        ):
             raise SafetyError(
                 f"Play duration must be {self.min_play_seconds}-{self.max_play_seconds} seconds"
             )
@@ -32,10 +36,16 @@ class SafetyValidator:
         if state.play_mode is None:
             raise SafetyError("Machine is not running")
 
-    def validate_claw_power(self, command: ClawPowerCommand, state: MachineState) -> None:
+    def validate_claw_power(
+        self, command: ClawPowerCommand, state: MachineState
+    ) -> None:
         if state.emergency_stopped:
             raise SafetyError("Emergency stop is active")
-        if not self.min_claw_power_percent <= int(command.power_percent) <= self.max_claw_power_percent:
+        if (
+            not self.min_claw_power_percent
+            <= int(command.power_percent)
+            <= self.max_claw_power_percent
+        ):
             raise SafetyError(
                 f"Claw power must be {self.min_claw_power_percent}-{self.max_claw_power_percent}%"
             )

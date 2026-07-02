@@ -9,7 +9,12 @@ import time
 from dataclasses import asdict
 
 from controller.adapters.arduino_adapter import ArduinoAdapter, ArduinoResponse
-from controller.models import ClawPowerCommand, EmergencyStopCommand, PlayStartCommand, PlayStopCommand
+from controller.models import (
+    ClawPowerCommand,
+    EmergencyStopCommand,
+    PlayStartCommand,
+    PlayStopCommand,
+)
 from controller.state import MachineState
 from controller.safety.validator import SafetyError, SafetyValidator
 
@@ -66,7 +71,13 @@ class RuntimeController:
                 args=(generation, command.duration_seconds),
                 daemon=True,
             ).start()
-            return self.state.snapshot(extra={"ok": True, "arduino_response": start_response.message, "power_response": power_response.message})
+            return self.state.snapshot(
+                extra={
+                    "ok": True,
+                    "arduino_response": start_response.message,
+                    "power_response": power_response.message,
+                }
+            )
 
     def stop_play(self, command: PlayStopCommand | None = None) -> dict:
         with self._lock:
@@ -77,7 +88,9 @@ class RuntimeController:
             response = self._send("PLAY STOP")
             self._record_response(response)
             self._mark_stopped("ready")
-            return self.state.snapshot(extra={"ok": True, "arduino_response": response.message})
+            return self.state.snapshot(
+                extra={"ok": True, "arduino_response": response.message}
+            )
 
     def set_claw_power(self, command: ClawPowerCommand) -> dict:
         with self._lock:
@@ -86,7 +99,9 @@ class RuntimeController:
             self._log_command(command)
             response = self._send(f"CLAW POWER {command.power_percent}")
             self._record_response(response)
-            return self.state.snapshot(extra={"ok": True, "arduino_response": response.message})
+            return self.state.snapshot(
+                extra={"ok": True, "arduino_response": response.message}
+            )
 
     def emergency_stop(self, command: EmergencyStopCommand | None = None) -> dict:
         with self._lock:
@@ -99,9 +114,15 @@ class RuntimeController:
             self._mark_stopped("emergency_stopped")
             LOGGER.critical(
                 "safety_emergency_stop",
-                extra={"event": "safety_emergency_stop", "source": command.source, "reason": command.reason},
+                extra={
+                    "event": "safety_emergency_stop",
+                    "source": command.source,
+                    "reason": command.reason,
+                },
             )
-            return self.state.snapshot(extra={"ok": True, "arduino_response": response.message})
+            return self.state.snapshot(
+                extra={"ok": True, "arduino_response": response.message}
+            )
 
     def clear_emergency_for_tests(self) -> None:
         with self._lock:

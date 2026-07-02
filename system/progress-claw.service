@@ -1,0 +1,18 @@
+[Unit]
+Description=Progress Claw OS runtime
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+Group=pi
+WorkingDirectory=/opt/progress-claw
+EnvironmentFile=-/etc/progress-claw/progress-claw.env
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/usr/bin/python3 /opt/progress-claw/main.py
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

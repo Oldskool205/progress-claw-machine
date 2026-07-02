@@ -37,7 +37,11 @@ class ArduinoAdapter:
     baud_rate: int = 115200
     timeout_seconds: float = 1.0
     force_mock: bool = False
-    device_patterns: tuple[str, ...] = ("/dev/ttyUSB*", "/dev/ttyACM*", "/dev/serial/by-id/*")
+    device_patterns: tuple[str, ...] = (
+        "/dev/ttyUSB*",
+        "/dev/ttyACM*",
+        "/dev/serial/by-id/*",
+    )
     _serial: object | None = field(default=None, init=False, repr=False)
     _mock_log: list[str] = field(default_factory=list, init=False, repr=False)
 
@@ -52,9 +56,19 @@ class ArduinoAdapter:
             ).split(",")
             if item.strip()
         )
-        force_mock = os.getenv("CLAW_ARDUINO_MOCK", "").lower() in {"1", "true", "yes", "on"}
+        force_mock = os.getenv("CLAW_ARDUINO_MOCK", "").lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }
         baud_rate = int(os.getenv("CLAW_ARDUINO_BAUD", "115200"))
-        return cls(port=port, baud_rate=baud_rate, force_mock=force_mock, device_patterns=patterns)
+        return cls(
+            port=port,
+            baud_rate=baud_rate,
+            force_mock=force_mock,
+            device_patterns=patterns,
+        )
 
     @property
     def mock_mode(self) -> bool:
@@ -76,27 +90,42 @@ class ArduinoAdapter:
         if self.force_mock or self._serial is not None:
             return
         if serial is None:
-            LOGGER.warning("arduino_serial_unavailable", extra={"event": "arduino_serial_unavailable"})
+            LOGGER.warning(
+                "arduino_serial_unavailable",
+                extra={"event": "arduino_serial_unavailable"},
+            )
             self.force_mock = True
             return
         port = self.port or self._discover_port()
         if not port:
-            LOGGER.warning("arduino_not_connected", extra={"event": "arduino_not_connected"})
+            LOGGER.warning(
+                "arduino_not_connected", extra={"event": "arduino_not_connected"}
+            )
             self.force_mock = True
             return
         try:
-            self._serial = serial.Serial(port, self.baud_rate, timeout=self.timeout_seconds)
+            self._serial = serial.Serial(
+                port, self.baud_rate, timeout=self.timeout_seconds
+            )
             time.sleep(0.2)
             LOGGER.info(
                 "arduino_connected",
-                extra={"event": "arduino_connected", "port": port, "baud_rate": self.baud_rate},
+                extra={
+                    "event": "arduino_connected",
+                    "port": port,
+                    "baud_rate": self.baud_rate,
+                },
             )
         except Exception as error:  # pragma: no cover - hardware dependent
             self._serial = None
             self.force_mock = True
             LOGGER.warning(
                 "arduino_connect_failed",
-                extra={"event": "arduino_connect_failed", "port": port, "error": str(error)},
+                extra={
+                    "event": "arduino_connect_failed",
+                    "port": port,
+                    "error": str(error),
+                },
             )
 
     def close(self) -> None:
@@ -110,7 +139,9 @@ class ArduinoAdapter:
     def send_command(self, command: str) -> ArduinoResponse:
         command = command.strip()
         if not command:
-            return ArduinoResponse(ok=False, message="ERR EMPTY_COMMAND", mock=self.mock_mode)
+            return ArduinoResponse(
+                ok=False, message="ERR EMPTY_COMMAND", mock=self.mock_mode
+            )
         self.connect()
         if self.mock_mode:
             self._mock_log.append(command)
@@ -124,12 +155,18 @@ class ArduinoAdapter:
             payload = f"{command}\n".encode("utf-8")
             self._serial.write(payload)
             self._serial.flush()
-            raw_response = self._serial.readline().decode("utf-8", errors="replace").strip()
+            raw_response = (
+                self._serial.readline().decode("utf-8", errors="replace").strip()
+            )
         except Exception as error:  # pragma: no cover - hardware dependent
             self.close()
             LOGGER.error(
                 "arduino_command_failed",
-                extra={"event": "arduino_command_failed", "command": command, "error": str(error)},
+                extra={
+                    "event": "arduino_command_failed",
+                    "command": command,
+                    "error": str(error),
+                },
             )
             return ArduinoResponse(ok=False, message=f"ERR {error}", mock=False)
 
@@ -137,7 +174,12 @@ class ArduinoAdapter:
         ok = response.startswith("OK")
         LOGGER.info(
             "arduino_command",
-            extra={"event": "arduino_command", "command": command, "response": response, "ok": ok},
+            extra={
+                "event": "arduino_command",
+                "command": command,
+                "response": response,
+                "ok": ok,
+            },
         )
         return ArduinoResponse(ok=ok, message=response, mock=False)
 

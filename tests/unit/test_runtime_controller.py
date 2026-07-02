@@ -2,7 +2,12 @@ import unittest
 
 from controller.adapters.arduino_adapter import ArduinoAdapter
 from controller.core.runtime_controller import RuntimeController
-from controller.models import ClawPowerCommand, EmergencyStopCommand, PlayStartCommand, PlayStopCommand
+from controller.models import (
+    ClawPowerCommand,
+    EmergencyStopCommand,
+    PlayStartCommand,
+    PlayStopCommand,
+)
 from controller.safety.validator import SafetyError
 
 
@@ -13,7 +18,9 @@ class RuntimeControllerTest(unittest.TestCase):
     def test_start_play_uses_mock_arduino_and_updates_state(self):
         controller = self.make_controller()
 
-        result = controller.start_play(PlayStartCommand(duration_seconds=10, source="test"))
+        result = controller.start_play(
+            PlayStartCommand(duration_seconds=10, source="test")
+        )
 
         self.assertTrue(result["ok"])
         self.assertTrue(result["running"])
@@ -41,7 +48,9 @@ class RuntimeControllerTest(unittest.TestCase):
     def test_claw_power_validation_and_command(self):
         controller = self.make_controller()
 
-        result = controller.set_claw_power(ClawPowerCommand(power_percent=70, source="test"))
+        result = controller.set_claw_power(
+            ClawPowerCommand(power_percent=70, source="test")
+        )
 
         self.assertEqual(result["claw_power_percent"], 70)
         self.assertIn("CLAW POWER 70", controller.arduino.mock_commands)
