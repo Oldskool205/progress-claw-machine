@@ -11,6 +11,9 @@ from flask import Blueprint, Flask, Response
 
 from services.logging.structured import configure_logging
 from vision.camera_manager import CameraManager, load_camera_config
+from vision.detection_cache import DetectionCache
+from vision.detection_service import DetectionService, create_detection_blueprint
+from vision.detector import YoloDetector, load_detector_config
 from vision.frame_queue import FrameQueue
 from vision.health import create_health_blueprint
 from vision.snapshot_service import create_snapshot_blueprint
@@ -69,6 +72,9 @@ def create_stream_blueprint(frame_queue: FrameQueue) -> Blueprint:
 def create_app(
     camera_manager: Optional[CameraManager] = None,
     frame_queue: Optional[FrameQueue] = None,
+    detection_cache: Optional[DetectionCache] = None,
+    detection_service: Optional[DetectionService] = None,
+    start_detection: bool = True,
     start_camera: bool = True,
 ) -> Flask:
     configure_vision_logging()
@@ -79,21 +85,37 @@ def create_app(
             Path(os.getenv("CLAW_CAMERA_CONFIG", "config/camera.yaml"))
         ),
     )
+    cache = detection_cache or DetectionCache()
+    detector_service = detection_service or DetectionService(
+        queue,
+        detector=YoloDetector(
+            config=load_detector_config(
+                Path(os.getenv("CLAW_CAMERA_CONFIG", "config/camera.yaml"))
+            ),
+        ),
+        cache=cache,
+    )
 
     app = Flask(__name__)
     app.config["VISION_FRAME_QUEUE"] = queue
     app.config["VISION_CAMERA_MANAGER"] = manager
+    app.config["VISION_DETECTION_CACHE"] = cache
+    app.config["VISION_DETECTION_SERVICE"] = detector_service
     app.register_blueprint(create_health_blueprint(manager))
     app.register_blueprint(create_snapshot_blueprint(queue))
     app.register_blueprint(create_stream_blueprint(queue))
+    app.register_blueprint(create_detection_blueprint(cache))
 
     if start_camera:
         manager.start()
+    if start_detection:
+        detector_service.start()
 
     @app.teardown_appcontext
     def _shutdown(_error=None):
         if os.getenv("CLAW_VISION_STOP_ON_TEARDOWN", "0") == "1":
             manager.stop()
+            detector_service.stop()
 
     return app
 

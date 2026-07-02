@@ -10,7 +10,11 @@ class SnapshotServiceTest(unittest.TestCase):
     def test_snapshot_returns_latest_jpeg(self):
         queue = FrameQueue()
         queue.put(JPEG_FRAME)
-        app = create_app(frame_queue=queue, start_camera=False)
+        app = create_app(
+            frame_queue=queue,
+            start_camera=False,
+            start_detection=False,
+        )
 
         response = app.test_client().get("/vision/snapshot")
 
@@ -19,7 +23,11 @@ class SnapshotServiceTest(unittest.TestCase):
         self.assertEqual(response.data, JPEG_FRAME)
 
     def test_snapshot_returns_unavailable_without_frame(self):
-        app = create_app(frame_queue=FrameQueue(), start_camera=False)
+        app = create_app(
+            frame_queue=FrameQueue(),
+            start_camera=False,
+            start_detection=False,
+        )
 
         response = app.test_client().get("/vision/snapshot")
 

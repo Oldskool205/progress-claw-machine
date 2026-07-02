@@ -11,7 +11,11 @@ class HealthServiceTest(unittest.TestCase):
             FrameQueue(),
             config=CameraConfig(width=1280, height=720, fps=30),
         )
-        app = create_app(camera_manager=manager, start_camera=False)
+        app = create_app(
+            camera_manager=manager,
+            start_camera=False,
+            start_detection=False,
+        )
 
         response = app.test_client().get("/vision/health")
 
