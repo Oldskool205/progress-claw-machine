@@ -10,7 +10,10 @@ from pathlib import Path
 from flask import Flask, jsonify
 
 from dashboard.backend import dashboard_state
+from game.events import create_game_state_blueprint
+from game.state_engine import GameStateEngine, load_game_state_config
 from services.logging.structured import configure_logging
+from vision.detection_cache import DetectionCache
 
 
 configure_logging()
@@ -28,10 +31,17 @@ from dashboard.backend.routes_camera import bp as camera_bp
 from dashboard.backend.routes_player import bp as player_bp
 from dashboard.backend.routes_system import bp as system_bp
 
+game_detection_cache = DetectionCache()
+game_state_engine = GameStateEngine(
+    game_detection_cache,
+    runtime_status_provider=dashboard_state.runtime_controller.status,
+    config=load_game_state_config(),
+)
 app.register_blueprint(system_bp)
 app.register_blueprint(camera_bp)
 app.register_blueprint(api_bp)
 app.register_blueprint(player_bp)
+app.register_blueprint(create_game_state_blueprint(game_state_engine))
 runtime_controller = dashboard_state.runtime_controller
 
 
