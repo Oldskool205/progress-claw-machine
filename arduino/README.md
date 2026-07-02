@@ -10,6 +10,8 @@ Current claw-machine firmware:
 - drives the grabber MOSFET from Arduino D5 PWM
 - keeps startup grabber pulses at full power before the countdown
 - applies dashboard-selected effective hold power when FlySky CH6 controls the grabber
+- uses the reserved A1/A2/A3 `HIGH/HIGH/HIGH` code to pulse D5 three times at
+  Time Up or dashboard Stop while keeping movement disabled
 
 Effective hold power can come from Manual mode or AI Crowd Bonus mode. AI mode
 uses the dashboard-provided people-count tiers:

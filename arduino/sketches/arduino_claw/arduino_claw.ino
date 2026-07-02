@@ -36,6 +36,7 @@ int deadZone = 25;
 const byte grabberPulsePwmValue = 255;
 const byte grabberPowerMinimumPercent = 40;
 const byte grabberPowerStepPercent = 10;
+const byte timeUpGrabberPulseCode = 7;
 
 bool moving = false;
 bool dashboardPlayActive = false;
@@ -46,6 +47,7 @@ const unsigned long grabberPulseInterval = 1000;
 const byte grabberPulseToggleCount = 6;
 
 bool grabberPulseActive = false;
+bool timeUpGrabberPulseActive = false;
 bool grabberPulseState = false;
 byte grabberPulseToggles = 0;
 unsigned long lastGrabberPulse = 0;
@@ -138,6 +140,9 @@ void loop() {
       millis() - dashboardPlayStarted >= dashboardPlayDuration
     )
   ) {
+    if (dashboardStart == HIGH && readGrabberPowerLevel() == timeUpGrabberPulseCode) {
+      startTimeUpGrabberPulse();
+    }
     dashboardPlayActive = false;
   }
   previousDashboardStart = dashboardStart;
@@ -151,12 +156,18 @@ void loop() {
   if (!dashboardPlayActive) {
     digitalWrite(step1Pin, LOW);
     digitalWrite(step2Pin, LOW);
-    setGrabberOutput(false);
     digitalWrite(buzzerPin, LOW);
+    beepState = false;
+
+    if (timeUpGrabberPulseActive) {
+      updateGrabberPulse();
+      return;
+    }
+
+    setGrabberOutput(false);
     grabberPulseActive = false;
     grabberPulseState = false;
     grabberPulseToggles = 0;
-    beepState = false;
     return;
   }
 
@@ -288,6 +299,16 @@ void setGrabberPulseOutput(bool enabled) {
 }
 
 byte readGrabberHoldPwmValue() {
+  byte level = readGrabberPowerLevel();
+  byte percent = grabberPowerMinimumPercent + (level * grabberPowerStepPercent);
+  if (percent > 100) {
+    percent = 100;
+  }
+
+  return map(percent, 0, 100, 0, 255);
+}
+
+byte readGrabberPowerLevel() {
   byte level = 0;
 
   if (digitalRead(grabberPowerBit0Pin) == HIGH) {
@@ -300,16 +321,21 @@ byte readGrabberHoldPwmValue() {
     level |= 4;
   }
 
-  byte percent = grabberPowerMinimumPercent + (level * grabberPowerStepPercent);
-  if (percent > 100) {
-    percent = 100;
-  }
-
-  return map(percent, 0, 100, 0, 255);
+  return level;
 }
 
 void startGrabberPulse() {
   grabberPulseActive = true;
+  timeUpGrabberPulseActive = false;
+  grabberPulseState = true;
+  grabberPulseToggles = 1;
+  lastGrabberPulse = millis();
+  setGrabberPulseOutput(true);
+}
+
+void startTimeUpGrabberPulse() {
+  grabberPulseActive = true;
+  timeUpGrabberPulseActive = true;
   grabberPulseState = true;
   grabberPulseToggles = 1;
   lastGrabberPulse = millis();
@@ -329,6 +355,7 @@ bool updateGrabberPulse() {
 
     if (grabberPulseToggles >= grabberPulseToggleCount) {
       grabberPulseActive = false;
+      timeUpGrabberPulseActive = false;
       grabberPulseState = false;
       setGrabberOutput(false);
     }

@@ -31,6 +31,13 @@ people-count tiers:
 Arduino reads A1/A2/A3 as a binary level and converts that level to D5 PWM hold
 power. The startup grabber pulse sequence still uses full PWM.
 
+The A1/A2/A3 level `111` is reserved and is not used for normal hold power.
+When the dashboard reaches natural Time Up or the operator presses Stop, it
+sets A1/A2/A3 to `111` and releases A0. Arduino treats that as a request to
+pulse D5 on/off three times at full PWM while all movement remains disabled.
+Reset, hacker mode, machine-disable, and firmware safety timeout paths do not
+send the reserved code and force D5 PWM to 0 immediately.
+
 ## Planned Serial Connection
 
 ```text

@@ -9,18 +9,19 @@ separate Raspberry Pi GPIO signal.
 The dashboard and Arduino sketch in this directory are a matched pair:
 
 ```text
-Dashboard: /home/araya/claw_dashboard/app.py
-Arduino:   /home/araya/claw_dashboard/arduino_claw/arduino_claw.ino
+Dashboard: /home/araya/Projects/Progress-Claw-OS/dashboard/backend/app.py
+Arduino:   /home/araya/Projects/Progress-Claw-OS/arduino/sketches/arduino_claw/arduino_claw.ino
 Original:  /home/araya/Claw M/C/Claw mc/remotewithdraw_copy_20260621122459/
 ```
 
-The bundled Arduino sketch is synchronized with the original FlySky firmware.
-Do not replace it with the previous serial/relay example.
+The bundled Arduino sketch keeps the original FlySky movement behavior and adds
+the Progress Claw OS dashboard gate, D5 MOSFET PWM grabber output, and
+dashboard-selected grabber power.
 
 ## Run
 
 ```bash
-cd /home/araya/claw_dashboard
+cd /home/araya/Projects/Progress-Claw-OS/dashboard/backend
 python3 app.py
 ```
 
@@ -31,8 +32,7 @@ Open `http://localhost:5000`.
 Use either synchronized copy of the remote-control firmware:
 
 ```bash
-/home/araya/claw_dashboard/arduino_claw/
-/home/araya/Claw M/C/Claw mc/remotewithdraw_copy_20260621122459/
+/home/araya/Projects/Progress-Claw-OS/arduino/sketches/arduino_claw/
 ```
 
 Wire the start signal:
@@ -51,17 +51,18 @@ configured game-time window finishes. The Arduino also enforces a 180-second
 safety timeout.
 GPIO 22, 23, and 24 select the effective grabber hold power shown in the
 dashboard. Effective power can come from Manual mode or AI Crowd Bonus mode.
-The dashboard is the safety gate for the machine: movement and grabber control
-remain disabled until the visible countdown begins, and Stop disables them
-immediately. While stopped, the Arduino forces both step outputs, the buzzer,
-and the grabber output off. It also ignores all FlySky and physical
-movement-button commands. FlySky movement is available only during the
+The dashboard is the safety gate for the machine: movement and grabber hold
+control remain disabled until the visible countdown begins. While stopped, the
+Arduino forces both step outputs and the buzzer off and ignores all FlySky and
+physical movement-button commands. FlySky movement is available only during the
 dashboard play window; channel 6 cannot bypass the dashboard gate.
 
 Wire the grabber MOSFET/driver control input to Arduino PWM pin D5. At the
 start of each active play window, the Arduino pulses D5 on/off three times at
 full power, then FlySky channel 6 turns D5 on/off using the dashboard-selected
-hold power. Stop and timeout always force D5 PWM to 0.
+hold power. Natural Time Up and the dashboard Stop button both request three
+full-power D5 pulses while movement remains disabled. Reset, hacker mode, and
+machine-disable stops still force D5 PWM to 0 immediately.
 
 AI Crowd Bonus mode maps camera people count to hold power:
 
@@ -90,10 +91,12 @@ Raspberry Pi GPIO input.
 5. After the grabber pulse sequence finishes, the configured game-time
    countdown begins.
 6. The browser beeps once per second during the countdown.
-7. Natural completion displays and says `TIME UP!` for 5 seconds.
-8. Pressing Stop releases GPIO immediately, plays the stop sound, and displays
-   `CLAW MACHINE STOPPED` for 5 seconds.
-9. A new player photo is required for the next start.
+7. Natural completion displays and says `TIME UP!`, then requests three
+   full-power grabber pulses.
+8. Pressing Stop releases the play gate, plays the stop sound, displays
+   `CLAW MACHINE STOPPED`, and requests three full-power grabber pulses.
+9. Movement remains disabled during the end/Stop pulse sequence.
+10. A new player photo is required for the next start.
 
 ## Upload firmware
 

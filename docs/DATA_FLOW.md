@@ -62,6 +62,11 @@ Current AI Crowd Bonus rule:
 The startup three-trigger grabber pulse remains full power. AI-selected power
 applies only to CH6 grabber hold power during play.
 
+Time Up and the dashboard Stop button use the reserved grabber-power bit code
+`111` to request the Arduino's three-trigger full-power D5 pulse sequence after
+the A0 play gate is released. Movement remains disabled during this end pulse.
+Other safety stop paths still force grabber PWM off immediately.
+
 ## Status Flow
 
 ```text

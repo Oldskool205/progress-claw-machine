@@ -53,6 +53,7 @@ pins are read by Arduino as a binary level:
 | 80% | HIGH | LOW | LOW |
 | 90% | HIGH | LOW | HIGH |
 | 100% | HIGH | HIGH | LOW |
+| Time-up pulse request | HIGH | HIGH | HIGH |
 
 AI Crowd Bonus mode uses these tiers before converting to the same A1/A2/A3
 power bits:
@@ -109,7 +110,13 @@ Arduino GND -> MOSFET source/load power GND common
 At the start of each active play window, firmware pulses D5 on/off three times
 at full PWM with one second per toggle. After that, FlySky channel 6 controls
 D5 using the dashboard-selected hold power while the dashboard gate remains
-active. Stop and timeout force D5 PWM to 0.
+active. Firmware safety timeout forces D5 PWM to 0.
+
+At natural time-up and when the dashboard Stop button is pressed, the dashboard
+sets A1/A2/A3 HIGH/HIGH/HIGH and releases A0. The firmware treats that reserved
+code as a request to pulse D5 on/off three times at full PWM while movement
+stays disabled. Reset, hacker mode, machine-disable, and firmware timeout paths
+do not send the reserved code and force D5 off immediately.
 
 The firmware uses `analogWrite()` on D5. Startup grabber pulses use full PWM.
 Normal CH6 grabber hold power is selected from the dashboard. Manual mode

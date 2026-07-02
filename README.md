@@ -67,6 +67,14 @@ Dashboard and AI code must not access Arduino directly. They submit command mode
 
 Legacy dashboard routes remain available where needed, but hardware-facing work is delegated to the controller.
 
+## Current Hardware Firmware Note
+
+The migrated claw-machine Arduino sketch uses D5 as the active-high PWM output
+for the grabber MOSFET. The Raspberry Pi GPIO power bits on Arduino A1/A2/A3
+select normal CH6 hold power from 40% to 100%. The reserved A1/A2/A3 code
+`111` requests the Arduino to pulse D5 three times at full power after natural
+Time Up or the dashboard Stop button while movement remains disabled.
+
 ## Run
 
 Install dependencies:
