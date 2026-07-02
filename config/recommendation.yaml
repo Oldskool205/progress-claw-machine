@@ -1,0 +1,6 @@
+# Recommendation Engine configuration
+player_ready_seconds: 3
+idle_demo_timeout: 30
+camera_timeout: 5
+arduino_timeout: 5
+recommendation_interval_ms: 500

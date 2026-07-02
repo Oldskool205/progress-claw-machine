@@ -12,6 +12,8 @@ from flask import Flask, jsonify
 from dashboard.backend import dashboard_state
 from game.events import create_game_state_blueprint
 from game.state_engine import GameStateEngine, load_game_state_config
+from recommendation.api import create_recommendation_blueprint
+from recommendation.engine import RecommendationEngine, load_recommendation_config
 from services.logging.structured import configure_logging
 from vision.detection_cache import shared_detection_cache
 
@@ -37,11 +39,18 @@ game_state_engine = GameStateEngine(
     runtime_status_provider=dashboard_state.runtime_controller.status,
     config=load_game_state_config(),
 )
+recommendation_engine = RecommendationEngine(
+    game_state_engine.state_cache,
+    game_detection_cache,
+    runtime_status_provider=dashboard_state.runtime_controller.status,
+    config=load_recommendation_config(),
+)
 app.register_blueprint(system_bp)
 app.register_blueprint(camera_bp)
 app.register_blueprint(api_bp)
 app.register_blueprint(player_bp)
 app.register_blueprint(create_game_state_blueprint(game_state_engine))
+app.register_blueprint(create_recommendation_blueprint(recommendation_engine))
 runtime_controller = dashboard_state.runtime_controller
 
 
