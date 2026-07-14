@@ -12,6 +12,11 @@ Current claw-machine firmware:
 - applies dashboard-selected effective hold power when FlySky CH6 controls the grabber
 - uses the reserved A1/A2/A3 `HIGH/HIGH/HIGH` code to pulse D5 three times at
   Time Up or dashboard Stop while keeping movement disabled
+- uses A4 for the X home switch and A5 for the Y home switch
+- uses D10 for linear actuator UP and D13 for linear actuator DOWN
+- sounds the buzzer while homing after Time Up or a dashboard home request
+- currently enables only A5/Y homing for limit-switch testing; A4/X homing is
+  temporarily held with `xHomingEnabled = false`
 
 Effective hold power can come from Manual mode or AI Crowd Bonus mode. AI mode
 uses the dashboard-provided people-count tiers:

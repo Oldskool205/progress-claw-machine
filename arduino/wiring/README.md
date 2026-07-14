@@ -16,13 +16,16 @@ Pin map for `arduino/sketches/arduino_claw/arduino_claw.ino`.
 | D7 | Motor 1 direction | Output | Stepper driver DIR input | Direction is set before step pulses. |
 | D8 | Motor 2 up button | Input pullup | Momentary button to GND | Active-low. Pressed when pin is grounded. |
 | D9 | Motor 2 down button | Input pullup | Momentary button to GND | Active-low. Pressed when pin is grounded. |
+| D10 | Linear actuator up relay | Output | Relay module input | Active-high relay command. Interlocked with D13 in firmware. |
 | D11 | Motor 2 step | Output | Stepper driver STEP input | Pulsed by firmware. |
 | D12 | Motor 2 direction | Output | Stepper driver DIR input | Direction is set before step pulses. |
-| D13 | Unused | - | - | Previously used for grabber on/off; grabber moved to D5 for PWM. |
+| D13 | Linear actuator down relay | Output | Relay module input | Active-high. Test startup carefully because D13 also drives the Uno onboard LED. |
 | A0 | Dashboard start gate | Input pullup | Raspberry Pi BCM GPIO 17 | Active-low. Dashboard pulls low during test/play. |
 | A1 | Grabber power bit 0 | Input | Raspberry Pi BCM GPIO 22 | Effective dashboard power selection, least-significant bit. |
 | A2 | Grabber power bit 1 | Input | Raspberry Pi BCM GPIO 23 | Effective dashboard power selection. |
 | A3 | Grabber power bit 2 | Input | Raspberry Pi BCM GPIO 24 | Effective dashboard power selection, most-significant bit. |
+| A4 | X home switch | Input pullup | NC switch to GND | Reserved for X homing; motion temporarily disabled during A5 testing. |
+| A5 | Y home switch | Input pullup | NC switch to GND | Active when the NC contact opens; current Y-only homing test input. |
 | GND | Common ground | Power reference | Raspberry Pi GND, drivers, buttons, receiver, buzzer/relay drivers | All control signals need a shared ground. |
 
 ## Raspberry Pi Dashboard Connection
@@ -115,8 +118,9 @@ active. Firmware safety timeout forces D5 PWM to 0.
 At natural time-up and when the dashboard Stop button is pressed, the dashboard
 sets A1/A2/A3 HIGH/HIGH/HIGH and releases A0. The firmware treats that reserved
 code as a request to pulse D5 on/off three times at full PWM while movement
-stays disabled. Reset, hacker mode, machine-disable, and firmware timeout paths
-do not send the reserved code and force D5 off immediately.
+stays disabled. Dashboard Reset uses the same `111` code with a short new A0
+low pulse as a dedicated HOME request. Hacker mode and machine-disable paths
+force D5 off immediately.
 
 The firmware uses `analogWrite()` on D5. Startup grabber pulses use full PWM.
 Normal CH6 grabber hold power is selected from the dashboard. Manual mode
@@ -124,6 +128,47 @@ supports 40% to 100%; AI Crowd Bonus mode uses the people-count tiers above.
 
 Use a MOSFET/driver stage appropriate for the grabber load. Do not drive a
 solenoid, motor, or high-current coil directly from D5.
+
+## Linear Actuator Relay Wiring
+
+```text
+Arduino D10 -> linear actuator up relay module input
+Arduino D13 -> linear actuator down relay module input
+Arduino GND -> relay module signal GND
+```
+
+FlySky CH4 controls the 24 VDC linear actuator while CH5 remote movement enable
+is on and the dashboard play gate is active. CH4 above the dead zone turns on
+the up relay. CH4 below the dead zone turns on the down relay. CH4 centered, CH5
+off, dashboard Stop, dashboard timeout, or firmware timeout forces both relay
+outputs off.
+
+The firmware interlocks D10 and D13 so both relay commands are not enabled at
+the same time, and it inserts a short off delay before reversing direction.
+Use relay modules or motor-control hardware rated for the actuator voltage and
+stall current. Do not drive relay coils directly from Arduino pins.
+
+Because D13 is connected to the Uno onboard LED and can change during startup
+or programming, verify that the DOWN relay remains inactive during power-up and
+firmware upload before attaching the actuator load.
+
+## X/Y Home Switch Wiring
+
+Use the normally-closed contacts:
+
+```text
+Arduino A4 -> X switch NC; X switch COM -> Arduino GND
+Arduino A5 -> Y switch NC; Y switch COM -> Arduino GND
+```
+
+With `INPUT_PULLUP`, an unpressed switch reads `LOW` and a pressed or
+disconnected switch reads `HIGH`. The current test firmware homes only Y on A5
+with `yHomeDirection = HIGH`; X/A4 is held by `xHomingEnabled = false`.
+
+At Time Up, or after the dedicated dashboard Reset home command, the buzzer
+pulses and Y moves until A5 activates. Y has a 60-second timeout; X retains a
+30-second timeout for when it is enabled. A timeout stops step pulses and
+latches a homing fault until restart.
 
 ## FlySky Receiver
 
@@ -144,13 +189,15 @@ Channel use in firmware:
 | CH1 | Motor 2 movement |
 | CH2 | Motor 1 movement |
 | CH3 | Speed control |
+| CH4 | Linear actuator up/down |
 | CH5 | Remote movement enable |
 | CH6 | Grabber on/off |
 
 ## Safety Notes
 
 - The dashboard gate on A0 must be wired and working before running the machine.
-- When A0 is not held low, firmware forces step outputs, buzzer, and grabber
-  output off and ignores FlySky and physical movement buttons.
+- When A0 is not held low, firmware forces step outputs, linear actuator relay
+  outputs, buzzer, and grabber output off and ignores FlySky and physical
+  movement buttons.
 - Verify every pin against the real machine wiring before powering motor,
   grabber, relay, or solenoid loads.

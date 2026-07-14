@@ -14,8 +14,19 @@ Raspberry Pi GPIO 22  -> Arduino A1  grabber power bit 0
 Raspberry Pi GPIO 23  -> Arduino A2  grabber power bit 1
 Raspberry Pi GPIO 24  -> Arduino A3  grabber power bit 2
 Arduino D5            -> grabber MOSFET PWM input
+Arduino A4            -> X-axis normally-closed home switch
+Arduino A5            -> Y-axis normally-closed home switch
+Arduino D10           -> linear actuator UP relay
+Arduino D13           -> linear actuator DOWN relay
 FlySky iBus           -> Arduino D0/RX
 ```
+
+After an active dashboard play gate is released, Arduino homes Y and then X.
+The buzzer sounds during homing. Y has a 60-second homing timeout, while X
+retains a 30-second timeout for when it is enabled. A timeout stops both step
+signals and latches a homing fault until the Arduino is
+restarted. The home direction constants in the sketch must be verified on the
+physical machine before normal operation.
 
 The dashboard writes an effective `grabber_power_percent`. In Manual mode this
 comes from the operator selector. In AI Crowd Bonus mode it comes from camera
@@ -35,8 +46,11 @@ The A1/A2/A3 level `111` is reserved and is not used for normal hold power.
 When the dashboard reaches natural Time Up or the operator presses Stop, it
 sets A1/A2/A3 to `111` and releases A0. Arduino treats that as a request to
 pulse D5 on/off three times at full PWM while all movement remains disabled.
-Reset, hacker mode, machine-disable, and firmware safety timeout paths do not
-send the reserved code and force D5 PWM to 0 immediately.
+When dashboard Reset is pressed while A0 is inactive, the dashboard sets
+A1/A2/A3 to `111` and briefly pulls A0 low. Arduino treats this new low edge as
+a dedicated HOME request and starts Y-then-X homing without enabling gameplay.
+Hacker mode, machine-disable, and firmware safety timeout paths force D5 PWM to
+0 immediately.
 
 ## Planned Serial Connection
 

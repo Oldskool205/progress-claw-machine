@@ -116,6 +116,7 @@ data/snapshots/*
 *.weights
 ai/**/runs/
 ai/**/exports/
+ai/**/raw_photos/
 
 # IDE and editor files
 .vscode/
