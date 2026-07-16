@@ -9,6 +9,7 @@ import time
 from dataclasses import asdict
 
 from controller.adapters.arduino_adapter import ArduinoAdapter, ArduinoResponse
+from controller.adapters.gpio_adapter import GpioArduinoAdapter
 from controller.models import (
     ClawPowerCommand,
     EmergencyStopCommand,
@@ -43,7 +44,14 @@ class RuntimeController:
             play_duration_seconds=int(os.getenv("CLAW_PLAY_DURATION_SECONDS", "60")),
             claw_power_percent=int(os.getenv("CLAW_GRABBER_POWER_PERCENT", "100")),
         )
-        return cls(state=state)
+        transport = os.getenv("CLAW_ARDUINO_TRANSPORT", "gpio").strip().lower()
+        if transport == "gpio":
+            arduino = GpioArduinoAdapter.from_env()
+        elif transport == "serial":
+            arduino = ArduinoAdapter.from_env()
+        else:
+            raise ValueError("CLAW_ARDUINO_TRANSPORT must be gpio or serial")
+        return cls(arduino=arduino, state=state)
 
     def status(self) -> dict:
         with self._lock:

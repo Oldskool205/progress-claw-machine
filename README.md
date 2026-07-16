@@ -51,11 +51,94 @@ Dashboard and AI code must not access Arduino directly. They submit command mode
 
 - Controller is the central safety boundary.
 - Dashboard runtime endpoints route through `RuntimeController`.
-- Arduino communication uses a line-based serial adapter.
-- Mock Arduino mode is automatic when hardware is not connected or can be forced with `CLAW_ARDUINO_MOCK=1`.
+- The current Arduino firmware is controlled through the Raspberry Pi GPIO play
+  gate and claw-power pins; an optional serial adapter remains available for
+  future firmware.
+- Mock Arduino mode is automatic when GPIO is unavailable or can be forced with
+  `CLAW_ARDUINO_MOCK=1`.
 - Machine state tracks running status, play timing, claw power, Arduino connection, mock mode, emergency stop, and faults.
 - Structured JSON logs cover commands, Arduino communication, and safety events.
 - Basic unit and integration tests run without Raspberry Pi GPIO or attached Arduino hardware.
+
+## Phase A Supabase Cloud Integration
+
+The optional `cloud/` module synchronizes a small machine-status snapshot to
+Supabase without placing cloud connectivity in the machine control path. Phase A
+is additive and does not modify game logic, the Vision Service, the Game State
+Engine, controller safety behavior, or existing REST APIs.
+
+Initially synchronized fields:
+
+- Machine name
+- Current status
+- X and Y positions
+- Claw power
+- Online state
+- UTC update timestamp
+
+Game history and AI detections are not synchronized in Phase A. Cloud
+synchronization is opt-in and is not started automatically by the runtime. If
+Supabase is unavailable, local play continues normally while the cloud service
+logs a warning and throttles later connection attempts.
+
+Configure Supabase by copying the environment template:
+
+```sh
+cp .env.example .env
+```
+
+Then provide the required values in `.env`:
+
+```dotenv
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_KEY=your-server-side-key
+```
+
+Optional cloud settings are `CLAW_MACHINE_NAME`,
+`SUPABASE_MACHINE_STATUS_TABLE`, `SUPABASE_RETRY_SECONDS`, and
+`SUPABASE_SYNC_INTERVAL_SECONDS`. The `.env` file is ignored by Git and must
+not be committed.
+
+Example manual synchronization:
+
+```python
+from cloud.sync_service import CloudSyncService
+
+cloud = CloudSyncService()
+cloud.connect()
+cloud.sync_game_status(
+    status="ready",
+    x_position=0.0,
+    y_position=0.0,
+    claw_power=70,
+)
+cloud.heartbeat()
+```
+
+See [docs/cloud/SUPABASE_SETUP.md](docs/cloud/SUPABASE_SETUP.md) for table SQL,
+configuration, Row Level Security guidance, logging, and troubleshooting.
+
+### Phase A.1 diagnostics and monitoring
+
+Run explicit live diagnostics with the dedicated
+`CLOUD-DIAGNOSTIC-TEST` row:
+
+```sh
+.venv/bin/python -m cloud.diagnostics --test-connection
+.venv/bin/python -m cloud.diagnostics --all
+```
+
+`--test-connection` performs a read-only connection and schema check. `--all`
+also writes, updates, and marks offline only the dedicated diagnostic row. It
+never reads production game state or invokes controller commands.
+
+When the dashboard is running, `/cloud` provides diagnostic monitoring and
+`/cloud/health` provides credential-free cached health JSON. Browser health
+polls do not contact Supabase; only explicit diagnostic actions do. The
+standalone diagnostic service can be installed from
+`system/progress-claw-cloud-monitor.service` and listens on port 5001. See
+[LIVE_VERIFICATION.md](docs/cloud/LIVE_VERIFICATION.md) and
+[CLOUD_MONITORING.md](docs/cloud/CLOUD_MONITORING.md).
 
 ## Backend API
 
@@ -80,19 +163,20 @@ Time Up or the dashboard Stop button while movement remains disabled.
 Install dependencies:
 
 ```sh
-pip install -r requirements.txt
+python3 -m venv .venv
+.venv/bin/python -m pip install -r requirements.txt
 ```
 
 Run with mock Arduino mode:
 
 ```sh
-CLAW_ARDUINO_MOCK=1 python main.py
+CLAW_ARDUINO_MOCK=1 .venv/bin/python main.py
 ```
 
-Run against an attached Arduino:
+Run on the Raspberry Pi with the current GPIO-connected Arduino firmware:
 
 ```sh
-CLAW_ARDUINO_DEVICE=/dev/ttyUSB0 python main.py
+.venv/bin/python main.py
 ```
 
 The backend listens on `0.0.0.0:5000` by default. Set `PORT` to change the port.
@@ -100,18 +184,40 @@ The backend listens on `0.0.0.0:5000` by default. Set `PORT` to change the port.
 Useful environment variables:
 
 - `CLAW_ARDUINO_MOCK=1` forces mock Arduino mode.
+- `CLAW_ARDUINO_TRANSPORT=gpio` selects the firmware-compatible Raspberry Pi
+  GPIO transport (default). Use `serial` only with firmware that implements the
+  controller's line-based command protocol.
+- `CLAW_START_GPIO=17` selects the active-low Arduino A0 play-gate output.
+- `CLAW_GRABBER_POWER_GPIOS=22,23,24` selects the Arduino A1-A3 power outputs.
 - `CLAW_ARDUINO_DEVICE=/dev/ttyUSB0` selects a serial device.
 - `CLAW_ARDUINO_BAUD=115200` selects the serial baud rate.
 - `CLAW_PLAY_DURATION_SECONDS=60` sets the default play duration.
 - `CLAW_GRABBER_POWER_PERCENT=100` sets the default claw power.
+- `SUPABASE_URL` selects the Supabase project URL.
+- `SUPABASE_KEY` provides the server-side Supabase API key.
+- `CLAW_MACHINE_NAME` sets the stable cloud machine name.
+- `SUPABASE_RETRY_SECONDS=30` controls cloud retry throttling.
+- `SUPABASE_SYNC_INTERVAL_SECONDS=60` records the planned synchronization
+  interval; Phase A.1 does not start a background synchronization loop.
 
 ## Test
 
 ```sh
-CLAW_ARDUINO_MOCK=1 python -m unittest discover tests
+CLAW_ARDUINO_MOCK=1 .venv/bin/python -m pytest -q
 ```
 
-The tests use the mock Arduino adapter and do not require attached hardware.
+The local suite uses mock Arduino and Supabase clients and does not require
+attached hardware or cloud access. A configured `.env` does not make the normal
+suite write to Supabase. Run the real diagnostic-row lifecycle only when
+explicitly requested:
+
+```sh
+PROGRESS_CLAW_RUN_LIVE_TESTS=1 \
+  .venv/bin/python -m unittest tests.live.cloud_live_test -v
+```
+
+Latest verification on 2026-07-16: 90 tests passed and the opt-in live test was
+skipped. The read-only Supabase connection/schema diagnostic also passed.
 
 ## Documentation
 
@@ -126,6 +232,9 @@ Architecture docs:
 - [docs/DATA_FLOW.md](docs/DATA_FLOW.md)
 - [docs/SERVICE_FLOW.md](docs/SERVICE_FLOW.md)
 - [docs/ARDUINO_COMMUNICATION.md](docs/ARDUINO_COMMUNICATION.md)
+- [docs/cloud/SUPABASE_SETUP.md](docs/cloud/SUPABASE_SETUP.md)
+- [docs/cloud/LIVE_VERIFICATION.md](docs/cloud/LIVE_VERIFICATION.md)
+- [docs/cloud/CLOUD_MONITORING.md](docs/cloud/CLOUD_MONITORING.md)
 
 ## Migration Status
 
@@ -144,6 +253,7 @@ The initial safe migration pass has been executed.
 ├── controller/      # Control APIs, adapters, protocols, and safety rules
 ├── ai/              # AI models, vision logic, strategy, and training assets
 ├── camera/          # Camera capture, calibration, processing, and snapshots
+├── cloud/           # Optional Supabase status synchronization
 ├── dashboard/       # Operator dashboard frontend/backend structure
 ├── arduino/         # Arduino firmware, sketches, wiring, and protocols
 ├── system/          # Runtime services, supervisor config, and system logs
@@ -167,3 +277,5 @@ The initial safe migration pass has been executed.
 - Emergency stop currently latches in process memory.
 - Advanced AI decision making is intentionally not implemented yet.
 - Mock mode verifies backend command flow but cannot validate real motors, limit switches, relays, or timing behavior.
+- Phase A.1 cloud synchronization remains operator-triggered; automatic
+  production scheduling and retention policy are not implemented yet.

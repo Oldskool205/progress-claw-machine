@@ -25,11 +25,6 @@ def player_photo():
             400,
         )
 
-    with lock:
-        locked_response = reject_when_hacker_mode()
-        if locked_response:
-            return locked_response
-
     encoded = data.get("image", "")
     if not isinstance(encoded, str) or "," not in encoded:
         return jsonify({"ok": False, "error": "Invalid player photo"}), 400
@@ -67,9 +62,6 @@ def player_photo():
         return jsonify({"ok": False, "error": "Player photo could not be saved"}), 500
 
     with lock:
-        locked_response = reject_when_hacker_mode()
-        if locked_response:
-            return locked_response
         state["player_photo_ready"] = True
         state["player_photo_version"] = player_id
         state["current_player_name"] = player_name
@@ -114,11 +106,6 @@ def capture_player():
             400,
         )
 
-    with lock:
-        locked_response = reject_when_hacker_mode()
-        if locked_response:
-            return locked_response
-
     with camera_condition:
         camera_condition.wait_for(lambda: shared.camera_frame is not None, timeout=3)
         frame = shared.camera_frame
@@ -146,9 +133,6 @@ def capture_player():
         return jsonify({"ok": False, "error": "Player photo could not be saved"}), 500
 
     with lock:
-        locked_response = reject_when_hacker_mode()
-        if locked_response:
-            return locked_response
         state["player_photo_ready"] = True
         state["player_photo_version"] = player_id
         state["current_player_name"] = player_name

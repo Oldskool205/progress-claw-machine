@@ -4,4 +4,6 @@ numpy
 opencv-python
 Pillow
 pyserial
+python-dotenv
+supabase
 ultralytics

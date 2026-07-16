@@ -61,7 +61,7 @@ Wire the grabber MOSFET/driver control input to Arduino PWM pin D5. At the
 start of each active play window, the Arduino pulses D5 on/off three times at
 full power, then FlySky channel 6 turns D5 on/off using the dashboard-selected
 hold power. Natural Time Up and the dashboard Stop button both request three
-full-power D5 pulses while movement remains disabled. Reset, hacker mode, and
+full-power D5 pulses while movement remains disabled. Reset and
 machine-disable stops still force D5 PWM to 0 immediately.
 
 AI Crowd Bonus mode maps camera people count to hold power:

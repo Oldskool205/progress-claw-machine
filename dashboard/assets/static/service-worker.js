@@ -1,11 +1,10 @@
-const CACHE_NAME = "claw-dashboard-v16";
+const CACHE_NAME = "claw-dashboard-v17";
 
 const APP_SHELL = [
   "/",
   "/static/manifest.webmanifest",
   "/static/images/steaming-club-logo.jpg",
-  "/static/images/steaming-club-background.jpg",
-  "/static/images/hacker-mode.png"
+  "/static/images/steaming-club-background.jpg"
 ];
 
 self.addEventListener("install", event => {

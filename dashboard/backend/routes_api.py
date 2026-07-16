@@ -110,9 +110,6 @@ def api_emergency_stop():
 def update_count():
     data = request.get_json(silent=True) or {}
     with lock:
-        locked_response = reject_when_hacker_mode()
-        if locked_response:
-            return locked_response
         if "value" in data:
             set_people(data["value"])
         else:
@@ -125,9 +122,6 @@ def update_count():
 def settings():
     data = request.get_json(silent=True) or {}
     with lock:
-        locked_response = reject_when_hacker_mode()
-        if locked_response:
-            return locked_response
         if "target" in data:
             state["target"] = max(1, min(999, int(data["target"])))
         if "play_duration" in data:
@@ -168,9 +162,6 @@ def settings():
 def ai_count():
     data = request.get_json(silent=True) or {}
     with lock:
-        locked_response = reject_when_hacker_mode()
-        if locked_response:
-            return locked_response
         if "people" not in data:
             return jsonify({"ok": False, "error": "Missing people count"}), 400
         set_ai_people_count(data["people"])
@@ -186,32 +177,12 @@ def ai_count():
         return jsonify(dashboard_state(ok=True))
 
 
-@bp.route("/api/hacker", methods=["POST"])
-def hacker():
-    data = request.get_json(silent=True) or {}
-    with lock:
-        if state["hacker_mode"] and data.get("password") != HACKER_UNLOCK_PASSWORD:
-            add_event("Incorrect hacker unlock password", "warning")
-            return jsonify({"ok": False, "error": "Wrong password"}), 403
-        state["hacker_mode"] = not state["hacker_mode"]
-        if state["hacker_mode"] and state["play_mode"] is not None:
-            stop_play("Machine stopped because hacker mode was enabled")
-        add_event(
-            "Hacker mode enabled" if state["hacker_mode"] else "Hacker mode disabled",
-            "success" if state["hacker_mode"] else "warning",
-        )
-        return jsonify(dashboard_state(ok=True))
-
-
 @bp.route("/api/play", methods=["POST"])
 def play():
     data = request.get_json(silent=True) or {}
     test_mode = bool(data.get("test"))
 
     with lock:
-        locked_response = reject_when_hacker_mode()
-        if locked_response:
-            return locked_response
         refresh_arduino_connection()
         if not state["machine_enabled"]:
             return jsonify({"ok": False, "error": "Machine is disabled"}), 409
@@ -263,9 +234,6 @@ def play():
 @bp.route("/api/stop", methods=["POST"])
 def stop():
     with lock:
-        locked_response = reject_when_hacker_mode()
-        if locked_response:
-            return locked_response
         if state["play_mode"] is None:
             return jsonify({"ok": False, "error": "Machine is not running"}), 409
         try:
@@ -278,16 +246,12 @@ def stop():
 @bp.route("/api/reset", methods=["POST"])
 def reset():
     with lock:
-        locked_response = reject_when_hacker_mode()
-        if locked_response:
-            return locked_response
         stop_play("Machine stopped for dashboard reset")
         state["people"] = 0
         state["credits"] = 0
         state["plays_today"] = 0
         state["last_play"] = None
         state["player_photo_ready"] = False
-        state["hacker_mode"] = False
         state["player_photo_version"] = 0
         state["current_player_name"] = None
         state["players"].clear()

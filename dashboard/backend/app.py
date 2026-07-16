@@ -8,6 +8,7 @@ import threading
 from pathlib import Path
 
 from flask import Flask, jsonify
+from werkzeug.exceptions import HTTPException
 
 from dashboard.backend import dashboard_state
 from game.events import create_game_state_blueprint
@@ -32,6 +33,7 @@ from dashboard.backend.routes_api import bp as api_bp
 from dashboard.backend.routes_camera import bp as camera_bp
 from dashboard.backend.routes_player import bp as player_bp
 from dashboard.backend.routes_system import bp as system_bp
+from cloud.routes import bp as cloud_bp
 
 game_detection_cache = shared_detection_cache()
 game_state_engine = GameStateEngine(
@@ -49,6 +51,7 @@ app.register_blueprint(system_bp)
 app.register_blueprint(camera_bp)
 app.register_blueprint(api_bp)
 app.register_blueprint(player_bp)
+app.register_blueprint(cloud_bp)
 app.register_blueprint(create_game_state_blueprint(game_state_engine))
 app.register_blueprint(create_recommendation_blueprint(recommendation_engine))
 runtime_controller = dashboard_state.runtime_controller
@@ -61,6 +64,11 @@ def handle_value_error(error):
         extra={"event": "dashboard_invalid_request", "error": str(error)},
     )
     return jsonify({"ok": False, "error": str(error)}), 400
+
+
+@app.errorhandler(HTTPException)
+def handle_http_error(error):
+    return jsonify({"ok": False, "error": error.description}), error.code
 
 
 @app.errorhandler(Exception)

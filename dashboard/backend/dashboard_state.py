@@ -70,7 +70,6 @@ GRABBER_POWER_PERCENT = max(
 READY_DURATION_SECONDS = int(os.getenv("CLAW_READY_DURATION_SECONDS", "3"))
 GRABBER_START_DURATION_SECONDS = int(os.getenv("CLAW_GRABBER_START_SECONDS", "6"))
 USB_CAMERA_DEVICE = os.getenv("CLAW_USB_CAMERA_DEVICE", "/dev/video0")
-HACKER_UNLOCK_PASSWORD = os.getenv("CLAW_HACKER_PASSWORD", "1234")
 PLAYER_NAME_FONT = "/usr/share/fonts/truetype/lato/Lato-Heavy.ttf"
 
 state = {
@@ -79,7 +78,6 @@ state = {
     "credits": 0,
     "plays_today": 0,
     "machine_enabled": True,
-    "hacker_mode": False,
     "arduino_connected": False,
     "machine_status": "Ready",
     "play_mode": None,
@@ -135,12 +133,6 @@ def dashboard_state(**extra):
 def controller_error_response(error, status_code=409):
     add_event(str(error), "warning")
     return jsonify(dashboard_state(ok=False, error=str(error))), status_code
-
-
-def reject_when_hacker_mode():
-    if state["hacker_mode"]:
-        return jsonify({"ok": False, "error": "Hacker mode is active"}), 423
-    return None
 
 
 def add_event(message, kind="info"):

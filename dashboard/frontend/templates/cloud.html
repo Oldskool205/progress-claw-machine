@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Progress Claw Cloud Monitor</title>
+  <style>
+    :root { color-scheme: dark; font-family: system-ui, sans-serif; }
+    body { margin: 0; background: #111827; color: #e5e7eb; }
+    main { width: min(1050px, calc(100% - 32px)); margin: 32px auto; }
+    header, section { background: #1f2937; border: 1px solid #374151; border-radius: 14px; padding: 20px; margin-bottom: 18px; }
+    h1, h2 { margin-top: 0; }
+    .banner { border-left: 8px solid #6b7280; }
+    .banner.green { border-left-color: #22c55e; }
+    .banner.yellow { border-left-color: #eab308; }
+    .banner.red { border-left-color: #ef4444; }
+    .banner.gray { border-left-color: #6b7280; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+    .item { background: #111827; padding: 12px; border-radius: 8px; overflow-wrap: anywhere; }
+    .label { display: block; color: #9ca3af; font-size: .8rem; text-transform: uppercase; margin-bottom: 5px; }
+    button, a { border: 0; border-radius: 8px; padding: 10px 14px; margin: 4px; background: #2563eb; color: white; text-decoration: none; cursor: pointer; }
+    button:disabled { opacity: .55; cursor: wait; }
+    #result { white-space: pre-wrap; min-height: 1.4em; }
+    .note { color: #fbbf24; }
+  </style>
+</head>
+<body>
+<main>
+  <header id="banner" class="banner gray">
+    <h1>Supabase Cloud Monitor</h1>
+    <p>Diagnostic-only monitoring. These controls never access motor control or game state.</p>
+    <a id="mainDashboardLink" href="#">Back to Dashboard</a>
+  </header>
+
+  <section>
+    <h2>Cached Cloud Health</h2>
+    <div id="health" class="grid"></div>
+  </section>
+
+  <section>
+    <h2>Supabase Machine Data</h2>
+    <p>Loaded only when you press Load Supabase Data.</p>
+    <div id="supabase-data" class="grid"></div>
+  </section>
+
+  <section>
+    <h2>Diagnostic Controls</h2>
+    <p class="note">Writes use only the dedicated machine name CLOUD-DIAGNOSTIC-TEST.</p>
+    <button data-action="test-connection">Test Connection</button>
+    <button data-action="send-test-status">Send Test Status</button>
+    <button data-action="heartbeat">Send Heartbeat</button>
+    <button data-action="load-supabase-data">Load Supabase Data</button>
+    <button id="refresh">Refresh Local Status</button>
+    <p id="result"></p>
+  </section>
+</main>
+<script>
+const fields = [
+  ['enabled', 'Enabled'], ['configured', 'Configured'], ['connected', 'Connected'],
+  ['machine_name', 'Machine Name'], ['current_machine_status.status', 'Status'],
+  ['current_machine_status.x_position', 'X Position'], ['current_machine_status.y_position', 'Y Position'],
+  ['current_machine_status.claw_power', 'Claw Power'], ['current_machine_status.online', 'Online'],
+  ['last_connection_attempt', 'Last Connection Attempt'], ['last_successful_sync', 'Last Successful Sync'],
+  ['last_heartbeat', 'Last Heartbeat'], ['last_supabase_read', 'Last Supabase Read'],
+  ['retry_count', 'Retry Count'], ['last_error', 'Last Error'],
+  ['sync_interval_seconds', 'Configured Sync Interval (seconds)']
+];
+document.getElementById('mainDashboardLink').href = `${window.location.protocol}//${window.location.hostname}:5000/`;
+const supabaseFields = [
+  ['id', 'Database ID'], ['machine_name', 'Machine Name'], ['status', 'Status'],
+  ['x_position', 'X Position'], ['y_position', 'Y Position'], ['claw_power', 'Claw Power'],
+  ['online', 'Online'], ['updated_at', 'Updated At']
+];
+function valueAt(data, path) {
+  return path.split('.').reduce((value, key) => value == null ? null : value[key], data);
+}
+function renderFields(targetId, definitions, data) {
+  const target = document.getElementById(targetId);
+  target.replaceChildren(...definitions.map(([key, label]) => {
+    const item = document.createElement('div');
+    item.className = 'item';
+    const heading = document.createElement('span');
+    heading.className = 'label';
+    heading.textContent = label;
+    item.append(heading, document.createTextNode(String(valueAt(data, key) ?? '—')));
+    return item;
+  }));
+}
+function render(data) {
+  renderFields('health', fields, data);
+  const remote = data.supabase_machine_status;
+  renderFields('supabase-data', supabaseFields, remote ?? {});
+  const state = !data.enabled || !data.configured ? 'gray' : data.connected ? 'green' : data.last_error ? 'red' : 'yellow';
+  document.getElementById('banner').className = `banner ${state}`;
+}
+async function refresh() {
+  const response = await fetch('/cloud/health', {cache: 'no-store'});
+  render(await response.json());
+}
+async function action(name) {
+  const buttons = document.querySelectorAll('button');
+  buttons.forEach(button => button.disabled = true);
+  try {
+    const response = await fetch(`/cloud/actions/${name}`, {method: 'POST'});
+    const data = await response.json();
+    document.getElementById('result').textContent = `${data.ok ? 'SUCCESS' : 'FAILED'}: ${data.message}`;
+    render(data.health);
+  } catch (_) {
+    document.getElementById('result').textContent = 'FAILED: Local diagnostic request unavailable';
+  } finally {
+    buttons.forEach(button => button.disabled = false);
+  }
+}
+document.querySelectorAll('[data-action]').forEach(button => button.addEventListener('click', () => action(button.dataset.action)));
+document.getElementById('refresh').addEventListener('click', refresh);
+refresh();
+</script>
+</body>
+</html>

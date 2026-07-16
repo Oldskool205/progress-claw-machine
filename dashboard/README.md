@@ -31,7 +31,7 @@ play.
 At natural Time Up and when the operator presses the dashboard Stop button, the
 dashboard sends the reserved A1/A2/A3 `HIGH/HIGH/HIGH` code, releases the A0
 play gate, and the Arduino pulses D5 on/off three times at full power while
-movement remains disabled. Reset, hacker mode, and machine-disable stops remain
+movement remains disabled. Reset and machine-disable stops remain
 immediate safety stops.
 
 ## Subfolders

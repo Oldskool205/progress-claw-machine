@@ -1,0 +1,21 @@
+[Unit]
+Description=Progress Claw diagnostic cloud monitor
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=araya
+Group=araya
+WorkingDirectory=/home/araya/Projects/Progress-Claw-OS
+EnvironmentFile=-/home/araya/Projects/Progress-Claw-OS/.env
+Environment=PYTHONUNBUFFERED=1
+Environment=FLASK_APP=cloud.monitoring_app
+ExecStart=/home/araya/Projects/Progress-Claw-OS/.venv/bin/python -m flask run --host 0.0.0.0 --port 5001
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

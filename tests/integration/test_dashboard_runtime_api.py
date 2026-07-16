@@ -21,6 +21,16 @@ class DashboardRuntimeApiTest(unittest.TestCase):
         self.assertIn("controller", payload)
         self.assertTrue(payload["controller"]["mock_arduino"])
 
+    def test_dashboard_shows_cloud_status_without_hacker_mode(self):
+        response = self.client.get("/")
+
+        self.assertEqual(response.status_code, 200)
+        page = response.get_data(as_text=True)
+        self.assertIn("Supabase", page)
+        self.assertIn('href="/cloud"', page)
+        self.assertNotIn("Hacker", page)
+        self.assertEqual(self.client.post("/api/hacker", json={}).status_code, 404)
+
     def test_health_endpoint_reports_runtime_dependencies(self):
         response = self.client.get("/api/health")
 
