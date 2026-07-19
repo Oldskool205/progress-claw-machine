@@ -1,0 +1,20 @@
+[Unit]
+Description=Progress Claw touchscreen kiosk browser
+After=graphical.target claw-dashboard.service
+Wants=graphical.target
+
+[Service]
+Type=simple
+User=araya
+Group=araya
+Environment=DISPLAY=:0
+Environment=XAUTHORITY=/home/araya/.Xauthority
+Environment=XDG_RUNTIME_DIR=/run/user/1000
+Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus
+EnvironmentFile=-/home/araya/Projects/Progress-Claw-OS/.env
+ExecStart=/home/araya/Projects/Progress-Claw-OS/scripts/kiosk/start_kiosk.sh
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=graphical.target

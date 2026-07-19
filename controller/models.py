@@ -10,6 +10,7 @@ class PlayStartCommand:
     duration_seconds: int
     source: str = "dashboard"
     test_mode: bool = False
+    startup_seconds: int = 0
 
 
 @dataclass(frozen=True)

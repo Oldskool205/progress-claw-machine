@@ -1,4 +1,4 @@
-const CACHE_NAME = "claw-dashboard-v17";
+const CACHE_NAME = "claw-dashboard-v25";
 
 const APP_SHELL = [
   "/",

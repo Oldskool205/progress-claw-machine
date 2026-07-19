@@ -13,6 +13,7 @@ class SafetyError(ValueError):
 class SafetyValidator:
     min_play_seconds = 10
     max_play_seconds = 180
+    max_startup_seconds = 30
     min_claw_power_percent = 40
     max_claw_power_percent = 100
 
@@ -30,6 +31,10 @@ class SafetyValidator:
         ):
             raise SafetyError(
                 f"Play duration must be {self.min_play_seconds}-{self.max_play_seconds} seconds"
+            )
+        if not 0 <= int(command.startup_seconds) <= self.max_startup_seconds:
+            raise SafetyError(
+                f"Startup duration must be 0-{self.max_startup_seconds} seconds"
             )
 
     def validate_stop(self, command: PlayStopCommand, state: MachineState) -> None:

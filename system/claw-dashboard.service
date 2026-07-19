@@ -8,8 +8,10 @@ Type=simple
 User=araya
 Group=araya
 WorkingDirectory=/home/araya/Projects/Progress-Claw-OS
+EnvironmentFile=-/home/araya/Projects/Progress-Claw-OS/.env
 Environment=PYTHONUNBUFFERED=1
 Environment=CLAW_ARDUINO_TRANSPORT=gpio
+Environment=GPIOZERO_PIN_FACTORY=rpigpio
 ExecStart=/home/araya/Projects/Progress-Claw-OS/.venv/bin/python /home/araya/Projects/Progress-Claw-OS/main.py
 Restart=on-failure
 RestartSec=5

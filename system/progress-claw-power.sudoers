@@ -1,0 +1,5 @@
+# Progress Claw power helper: exact allowlist only. Validate with visudo -cf.
+araya ALL=(root) NOPASSWD: /usr/local/sbin/progress-claw-power reboot
+araya ALL=(root) NOPASSWD: /usr/local/sbin/progress-claw-power poweroff
+pi ALL=(root) NOPASSWD: /usr/local/sbin/progress-claw-power reboot
+pi ALL=(root) NOPASSWD: /usr/local/sbin/progress-claw-power poweroff

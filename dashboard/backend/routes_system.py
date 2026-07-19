@@ -41,7 +41,7 @@ def service_worker():
         current_app.static_folder,
         "service-worker.js",
         mimetype="application/javascript",
-        cache_timeout=0,
+        max_age=0,
     )
 
 

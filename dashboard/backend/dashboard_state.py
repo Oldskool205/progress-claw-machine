@@ -68,7 +68,7 @@ GRABBER_POWER_PERCENT = max(
     min(MAX_GRABBER_POWER_PERCENT, int(os.getenv("CLAW_GRABBER_POWER_PERCENT", "100"))),
 )
 READY_DURATION_SECONDS = int(os.getenv("CLAW_READY_DURATION_SECONDS", "3"))
-GRABBER_START_DURATION_SECONDS = int(os.getenv("CLAW_GRABBER_START_SECONDS", "6"))
+GRABBER_START_DURATION_SECONDS = int(os.getenv("CLAW_GRABBER_START_SECONDS", "1"))
 USB_CAMERA_DEVICE = os.getenv("CLAW_USB_CAMERA_DEVICE", "/dev/video0")
 PLAYER_NAME_FONT = "/usr/share/fonts/truetype/lato/Lato-Heavy.ttf"
 
@@ -78,6 +78,7 @@ state = {
     "credits": 0,
     "plays_today": 0,
     "machine_enabled": True,
+    "maintenance_mode": False,
     "arduino_connected": False,
     "machine_status": "Ready",
     "play_mode": None,
@@ -114,12 +115,20 @@ def dashboard_state(**extra):
     state["arduino_connected"] = controller_status["arduino_connected"]
     state["machine_enabled"] = controller_status["machine_enabled"]
     state["grabber_power_percent"] = controller_status["claw_power_percent"]
+    if state["play_mode"] is not None and not controller_status["running"]:
+        state["play_mode"] = None
+        state["countdown_starts_at"] = None
+        state["play_ends_at"] = None
+        state["player_photo_ready"] = False
+        add_event("Claw machine play window completed", "success")
     if controller_status["emergency_stopped"]:
         state["machine_status"] = "Emergency stopped"
     elif controller_status["running"]:
         state["machine_status"] = "Running"
     elif controller_status["status"] == "fault":
         state["machine_status"] = "Fault"
+    elif state["maintenance_mode"]:
+        state["machine_status"] = "Maintenance"
     elif state["play_mode"] is None:
         state["machine_status"] = "Ready"
     return {
@@ -356,15 +365,15 @@ def run_play_window(generation, duration):
         add_event("Claw machine play window completed", "success")
 
 
-def trigger_play(duration):
-    result = runtime_controller.start_play(
+def trigger_play(duration, test_mode=False):
+    return runtime_controller.start_play(
         PlayStartCommand(
             duration_seconds=duration,
             source="dashboard",
-            test_mode=state["play_mode"] == "test",
+            test_mode=test_mode,
+            startup_seconds=READY_DURATION_SECONDS + GRABBER_START_DURATION_SECONDS,
         )
     )
-    return not result["mock_arduino"]
 
 
 def release_start_output():
@@ -372,12 +381,12 @@ def release_start_output():
         runtime_controller.stop_play(PlayStopCommand(source="dashboard"))
 
 
-def stop_play(message):
+def stop_play(message, source="dashboard"):
     global play_generation
     play_generation += 1
     if runtime_controller.status()["running"]:
         runtime_controller.stop_play(
-            PlayStopCommand(source="dashboard", reason=message)
+            PlayStopCommand(source=source, reason=message)
         )
     state["machine_status"] = "Ready"
     state["play_mode"] = None

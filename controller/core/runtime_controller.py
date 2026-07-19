@@ -62,21 +62,25 @@ class RuntimeController:
     def start_play(self, command: PlayStartCommand) -> dict:
         with self._lock:
             self.validator.validate_start(command, self.state)
+            self._log_command(command)
+            power_response = self._send(f"CLAW POWER {self.state.claw_power_percent}")
+            self._record_response(power_response)
+            self._require_ok(power_response, "set claw power")
+            start_response = self._send(f"PLAY START {command.duration_seconds}")
+            self._record_response(start_response)
+            self._require_ok(start_response, "start play")
             self._play_generation += 1
             generation = self._play_generation
             self.state.status = "running"
             self.state.play_mode = "test" if command.test_mode else "play"
             self.state.play_duration_seconds = command.duration_seconds
             now = time.time()
+            hardware_window_seconds = command.startup_seconds + command.duration_seconds
             self.state.play_started_at = now
-            self.state.play_ends_at = now + command.duration_seconds
-            self._log_command(command)
-            power_response = self._send(f"CLAW POWER {self.state.claw_power_percent}")
-            start_response = self._send(f"PLAY START {command.duration_seconds}")
-            self._record_response(start_response)
+            self.state.play_ends_at = now + hardware_window_seconds
             threading.Thread(
                 target=self._auto_stop_after_play,
-                args=(generation, command.duration_seconds),
+                args=(generation, hardware_window_seconds),
                 daemon=True,
             ).start()
             return self.state.snapshot(
@@ -95,6 +99,7 @@ class RuntimeController:
             self._log_command(command)
             response = self._send("PLAY STOP")
             self._record_response(response)
+            self._require_ok(response, "stop play")
             self._mark_stopped("ready")
             return self.state.snapshot(
                 extra={"ok": True, "arduino_response": response.message}
@@ -103,10 +108,11 @@ class RuntimeController:
     def set_claw_power(self, command: ClawPowerCommand) -> dict:
         with self._lock:
             self.validator.validate_claw_power(command, self.state)
-            self.state.claw_power_percent = command.power_percent
             self._log_command(command)
             response = self._send(f"CLAW POWER {command.power_percent}")
             self._record_response(response)
+            self._require_ok(response, "set claw power")
+            self.state.claw_power_percent = command.power_percent
             return self.state.snapshot(
                 extra={"ok": True, "arduino_response": response.message}
             )
@@ -144,7 +150,8 @@ class RuntimeController:
                 return
             response = self._send("PLAY STOP")
             self._record_response(response)
-            self._mark_stopped("ready")
+            if response.ok:
+                self._mark_stopped("ready")
 
     def _send(self, command: str) -> ArduinoResponse:
         response = self.arduino.send_command(command)
@@ -162,6 +169,11 @@ class RuntimeController:
             "safety_arduino_fault",
             extra={"event": "safety_arduino_fault", "response": response.message},
         )
+
+    @staticmethod
+    def _require_ok(response: ArduinoResponse, action: str) -> None:
+        if not response.ok:
+            raise SafetyError(f"Machine could not {action}: {response.message}")
 
     def _mark_stopped(self, status: str) -> None:
         self.state.status = status

@@ -1,5 +1,6 @@
 flask
 gpiozero
+RPi.GPIO; platform_machine == "aarch64" or platform_machine == "armv7l"
 numpy
 opencv-python
 Pillow

@@ -58,6 +58,43 @@ class GpioArduinoAdapterTest(unittest.TestCase):
         self.assertFalse(adapter._start_output.value)
         self.assertEqual([pin.value for pin in adapter._power_outputs], [False, False, False])
 
+    def test_gpio_initialization_failure_is_not_reported_as_mock_success(self):
+        def failing_factory(*args, **kwargs):
+            raise RuntimeError("GPIO permission denied")
+
+        adapter = GpioArduinoAdapter(output_device_factory=failing_factory)
+
+        response = adapter.send_command("PLAY START 60")
+
+        self.assertFalse(response.ok)
+        self.assertFalse(response.mock)
+        self.assertFalse(adapter.connected)
+        self.assertIn("GPIO permission denied", response.message)
+
+    def test_lost_gpio_outputs_are_reopened_before_the_next_command(self):
+        class RecoverableOutput(FakeOutput):
+            created = []
+
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                self.closed = False
+                self.created.append(self)
+
+            def close(self):
+                self.closed = True
+
+        adapter = GpioArduinoAdapter(output_device_factory=RecoverableOutput)
+        self.assertTrue(adapter.send_command("CLAW POWER 70").ok)
+        original_outputs = list(RecoverableOutput.created)
+        original_outputs[0].closed = True
+
+        response = adapter.send_command("PLAY START 60")
+
+        self.assertTrue(response.ok)
+        self.assertEqual(len(RecoverableOutput.created), 8)
+        self.assertTrue(all(output.closed for output in original_outputs))
+        self.assertTrue(adapter._start_output.value)
+
 
 if __name__ == "__main__":
     unittest.main()

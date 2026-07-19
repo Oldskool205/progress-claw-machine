@@ -47,8 +47,9 @@
       width:clamp(150px,22vw,240px); height:clamp(150px,22vw,240px);
       border-radius:30px; object-fit:cover;
       border:3px solid var(--cyan); box-shadow:0 0 28px #19d9ffbb,0 0 54px #ff258188;
-      margin-bottom:24px;
+      margin-bottom:24px; touch-action:none; user-select:none; cursor:pointer;
     }
+    .start-logo.holding { border-color:var(--yellow); box-shadow:0 0 38px var(--yellow),0 0 64px var(--pink); }
     .start-title {
       margin:0; font-size:clamp(42px,8vw,84px); line-height:.9; font-weight:900;
       color:white; text-shadow:0 0 16px white,0 0 34px var(--cyan),0 0 58px var(--pink);
@@ -88,7 +89,9 @@
       width: 58px; height: 58px; display: block; border-radius: 14px;
       object-fit: cover; background: white; border: 2px solid #56e7ff;
       box-shadow: 0 0 18px #19d9ffcc, 0 0 36px #ff258177;
+      touch-action:none; user-select:none; cursor:pointer;
     }
+    .logo.holding { border-color:var(--yellow); box-shadow:0 0 25px var(--yellow),0 0 42px var(--pink); }
     h1 {
       font-size: 21px; margin: 0; letter-spacing: -.02em;
       text-shadow: 0 0 16px #19d9ff77, 0 0 24px #ff258155;
@@ -197,6 +200,18 @@
       white-space:nowrap; width:100%; text-align:center;
     }
     .play-countdown.time-up .countdown-label { display:none; }
+    .play-countdown.try-again {
+      border-color:var(--green);
+      box-shadow:inset 0 0 40px #45e09b44,0 0 34px #45e09baa;
+      animation:readyPulse .7s ease-in-out infinite;
+    }
+    .play-countdown.try-again .countdown-number {
+      position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+      padding:18px; font-size:clamp(34px,6vw,58px); letter-spacing:-.03em;
+      color:white; text-shadow:0 0 12px white,0 0 30px var(--green);
+      white-space:nowrap; width:100%; text-align:center;
+    }
+    .play-countdown.try-again .countdown-label { display:none; }
     .play-countdown.get-ready {
       border-color:var(--yellow);
       box-shadow:inset 0 0 40px #ffd45b44,0 0 34px #ffd45baa;
@@ -300,6 +315,48 @@
       background:#080a12; transform:scaleX(-1);
     }
     .camera-actions { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:14px; }
+    .admin-trigger {
+      min-width:48px; min-height:48px; padding:10px; color:var(--muted);
+      background:transparent; border:1px solid transparent; font-size:18px;
+      touch-action:none; user-select:none;
+    }
+    .admin-trigger.holding { color:var(--cyan); border-color:#19d9ff88; }
+    .admin-modal {
+      position:fixed; inset:0; z-index:40; display:none; place-items:center; padding:20px;
+      background:#050812e8; backdrop-filter:blur(12px);
+    }
+    .admin-modal.open { display:grid; }
+    .admin-panel {
+      width:min(560px,100%); max-height:90vh; overflow:auto; padding:24px;
+      border-radius:22px; background:#14182a; border:1px solid #19d9ff88;
+      box-shadow:0 0 45px #19d9ff44,0 0 55px #ff258133;
+    }
+    .admin-heading { display:flex; justify-content:space-between; gap:16px; align-items:center; }
+    .admin-heading h2 { margin:0; }
+    .admin-close { min-width:48px; min-height:48px; padding:10px; font-size:20px; }
+    .admin-notice {
+      margin:16px 0; padding:12px; border:1px solid #ffd45b66;
+      border-radius:12px; color:var(--yellow); background:#2a2413;
+    }
+    .admin-pin { margin-top:16px; }
+    .admin-pin input { margin-top:7px; font-size:20px; letter-spacing:.2em; }
+    .admin-auth-actions { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:12px; }
+    .admin-actions { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:20px; }
+    .admin-actions button { min-height:58px; }
+    .admin-actions button.holding { border:1px solid var(--yellow); color:var(--yellow); }
+    .power-confirm-modal {
+      position:fixed; inset:0; z-index:50; display:none; place-items:center; padding:20px;
+      background:#050812f2; backdrop-filter:blur(14px);
+    }
+    .power-confirm-modal.open { display:grid; }
+    .power-confirm-panel {
+      width:min(480px,100%); padding:26px; text-align:center; border-radius:22px;
+      background:#21151d; border:2px solid var(--red); box-shadow:0 0 55px #ff6b7066;
+    }
+    .power-confirm-panel h2 { margin-top:0; color:var(--red); }
+    .power-confirm-actions { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:22px; }
+    .power-confirm-hold { background:#a7263b; min-height:62px; }
+    .power-confirm-hold.holding { outline:3px solid var(--yellow); color:var(--yellow); }
     @media(max-width:800px) {
       .control { grid-column:span 12; }
     }
@@ -309,13 +366,17 @@
       .actions button { width:100%; }
       header { align-items:flex-start; flex-wrap:wrap; }.status { font-size:0; }.status .dot { margin:0; }
       .player-panel { order:3; width:100%; justify-content:flex-end; }
+      .admin-actions { grid-template-columns:1fr; }
     }
   </style>
 </head>
 <body class="start-screen-active">
   <section id="startScreen" class="start-screen" aria-label="Game start screen">
     <div class="start-stage">
-      <img class="start-logo" src="{{ url_for('static', filename='images/steaming-club-logo.jpg') }}" alt="Steaming Club logo">
+      <img id="adminTrigger" class="start-logo"
+           src="{{ url_for('static', filename='images/steaming-club-logo.jpg') }}"
+           alt="Steaming Club logo" role="button" tabindex="0" draggable="false"
+           aria-label="Press and hold the Steaming Club logo for administrator menu">
       <h1 class="start-title">CLAW CONTROL</h1>
       <div class="start-subtitle">Game dashboard ready</div>
       <button class="start-game-button" onclick="enterDashboard()">START GAME</button>
@@ -325,7 +386,10 @@
   <main class="shell">
     <header>
       <div class="brand">
-        <img class="logo" src="{{ url_for('static', filename='images/steaming-club-logo.jpg') }}" alt="Steaming Club logo">
+        <img id="dashboardLogo" class="logo"
+             src="{{ url_for('static', filename='images/steaming-club-logo.jpg') }}"
+             alt="Steaming Club logo" role="button" tabindex="0" draggable="false"
+             aria-label="Press and hold the Steaming Club logo to return to the start screen">
         <div><h1>Steaming Club Claw Control</h1><div class="subtitle">Machine dashboard</div></div>
       </div>
       <div class="player-panel">
@@ -404,23 +468,269 @@
 
     </section>
   </main>
+  <section id="adminModal" class="admin-modal" role="dialog" aria-modal="true"
+           aria-labelledby="adminTitle" aria-hidden="true">
+    <div class="admin-panel">
+      <div class="admin-heading">
+        <div>
+          <h2 id="adminTitle">Administrator</h2>
+          <div class="label">Protected touchscreen controls</div>
+        </div>
+        <button id="adminClose" class="admin-close" type="button" aria-label="Close administrator menu">×</button>
+      </div>
+      <div id="adminNotice" class="admin-notice" role="status">
+        Checking administrator authentication…
+      </div>
+      <label class="admin-pin" for="adminPin">
+        <span class="label">ADMIN PIN</span>
+        <input id="adminPin" type="password" inputmode="numeric" pattern="[0-9]*"
+               maxlength="8" autocomplete="off" placeholder="Enter PIN">
+      </label>
+      <div class="admin-auth-actions">
+        <button id="adminLogin" type="button">Unlock</button>
+        <button id="adminLogout" type="button" disabled>Lock / Logout</button>
+      </div>
+      <div class="admin-actions" aria-label="Administrator actions">
+        <button id="adminExitKiosk" type="button" data-admin-action="exit-kiosk" disabled>Exit kiosk</button>
+        <button id="adminMaintenance" type="button" data-admin-action="maintenance" disabled>Enter maintenance</button>
+        <button id="adminRestartKiosk" type="button" data-admin-action="restart-kiosk" disabled>Restart kiosk</button>
+        <button id="adminStopGame" type="button" data-admin-action="stop-game" disabled>Stop current game</button>
+        <button id="adminReboot" type="button" data-admin-action="reboot" disabled>Reboot Raspberry Pi</button>
+        <button id="adminShutdown" type="button" data-admin-action="poweroff" disabled>Shut down Raspberry Pi</button>
+      </div>
+    </div>
+  </section>
+  <section id="powerConfirmModal" class="power-confirm-modal" role="alertdialog"
+           aria-modal="true" aria-labelledby="powerConfirmTitle" aria-hidden="true">
+    <div class="power-confirm-panel">
+      <h2 id="powerConfirmTitle">Confirm system action</h2>
+      <p id="powerConfirmMessage">This action requires maintenance mode.</p>
+      <div id="powerModeNotice" class="admin-notice">Checking power-control mode…</div>
+      <div class="power-confirm-actions">
+        <button id="powerConfirmCancel" type="button">Cancel</button>
+        <button id="powerConfirmHold" class="power-confirm-hold" type="button">Hold 3 seconds</button>
+      </div>
+    </div>
+  </section>
   <div id="toast" class="toast"></div>
 
   <script>
     let current = {};
     let timeUpUntil = 0;
+    let tryAgainUntil = 0;
+    let lastTimeUpPlayEndsAt = null;
     let stoppedUntil = 0;
     let previousPlayMode = null;
     let audioContext = null;
     let lastBeepSecond = null;
     let browserCameraReady = false;
     let dashboardEntered = false;
+    let adminHoldTimer = null;
+    let dashboardLogoHoldTimer = null;
+    let adminActionHoldTimer = null;
+    let powerConfirmTimer = null;
+    let pendingPowerAction = null;
+    let countdownDisplayPhase = null;
+    let playStartPending = false;
+    let startupVisualStartedAt = 0;
+    const ADMIN_HOLD_MS = 1800;
+    const POWER_CONFIRM_HOLD_MS = 3000;
+    const TIME_UP_DISPLAY_MS = 3000;
+    const TRY_AGAIN_DISPLAY_MS = 3000;
+    const GRABBER_START_DISPLAY_SECONDS = 1;
+    const READY_DISPLAY_SECONDS = 2;
+    const PREPARING_DISPLAY_SECONDS = 1;
+    const STARTUP_DISPLAY_TOTAL_SECONDS = PREPARING_DISPLAY_SECONDS
+      + READY_DISPLAY_SECONDS
+      + GRABBER_START_DISPLAY_SECONDS;
+    async function openAdminMenu() {
+      adminModal.classList.add("open");
+      adminModal.setAttribute("aria-hidden", "false");
+      adminClose.focus();
+      await refreshAdminStatus();
+    }
+    function closeAdminMenu() {
+      adminModal.classList.remove("open");
+      adminModal.setAttribute("aria-hidden", "true");
+      adminTrigger.focus();
+    }
+    function beginAdminHold(event) {
+      if (event.pointerType === "mouse" && event.button !== 0) return;
+      clearTimeout(adminHoldTimer);
+      adminTrigger.classList.add("holding");
+      adminHoldTimer = setTimeout(() => {
+        adminTrigger.classList.remove("holding");
+        openAdminMenu();
+      }, ADMIN_HOLD_MS);
+    }
+    function cancelAdminHold() {
+      clearTimeout(adminHoldTimer);
+      adminHoldTimer = null;
+      adminTrigger.classList.remove("holding");
+    }
+    function renderAdminStatus(status) {
+      adminPin.disabled = !status.configured || status.authenticated;
+      adminLogin.disabled = !status.configured || status.authenticated;
+      adminLogout.disabled = !status.authenticated;
+      adminExitKiosk.disabled = !status.authenticated || status.machine_running;
+      adminRestartKiosk.disabled = !status.authenticated || status.machine_running;
+      adminMaintenance.disabled = !status.authenticated;
+      adminStopGame.disabled = !status.authenticated || !status.machine_running;
+      const powerActionDisabled = !status.authenticated || status.machine_running || !status.maintenance_mode;
+      adminReboot.disabled = powerActionDisabled;
+      adminShutdown.disabled = powerActionDisabled;
+      adminMaintenance.textContent = status.maintenance_mode ? "Exit maintenance" : "Enter maintenance";
+      adminMaintenance.dataset.enabled = status.maintenance_mode ? "true" : "false";
+      const livePower = status.power_mode === "live";
+      powerModeNotice.textContent = livePower
+        ? "LIVE MODE — this action will operate the Raspberry Pi."
+        : "SIMULATION MODE — no Raspberry Pi power command will run.";
+      if (!status.configured) {
+        adminNotice.textContent = "Admin PIN is not configured. System controls remain unavailable.";
+      } else if (status.authenticated) {
+        adminNotice.textContent = `Admin unlocked for ${status.expires_in} seconds. Press and hold an enabled action.`;
+      } else {
+        adminNotice.textContent = "Enter the administrator PIN to enable protected controls.";
+      }
+    }
+    async function refreshAdminStatus() {
+      try {
+        renderAdminStatus(await api("/api/admin/status"));
+      } catch (error) {
+        adminPin.disabled = true;
+        adminLogin.disabled = true;
+        adminLogout.disabled = true;
+        adminNotice.textContent = error.message;
+      }
+    }
+    async function loginAdmin() {
+      try {
+        const status = await api("/api/admin/login", {pin:adminPin.value});
+        adminPin.value = "";
+        renderAdminStatus(status);
+        toast("Administrator unlocked");
+      } catch (error) {
+        adminPin.value = "";
+        adminPin.focus();
+        toast(error.message);
+      }
+    }
+    async function logoutAdmin() {
+      try {
+        renderAdminStatus(await api("/api/admin/logout", {}));
+        toast("Administrator locked");
+      } catch (error) { toast(error.message); }
+    }
+    async function runAdminAction(button) {
+      try {
+        if (button === adminStopGame) {
+          const result = await api("/api/admin/stop-game", {confirm:"STOP_CURRENT_GAME"});
+          render(result);
+          renderAdminStatus(result.admin);
+          toast("Current game stopped");
+        } else if (button === adminExitKiosk) {
+          const result = await api("/api/admin/exit-kiosk", {confirm:"EXIT_KIOSK"});
+          toast(result.message);
+        } else if (button === adminRestartKiosk) {
+          const result = await api("/api/admin/restart-kiosk", {confirm:"RESTART_KIOSK"});
+          toast(result.message);
+        } else if (button === adminMaintenance) {
+          const enabled = button.dataset.enabled !== "true";
+          const confirm = enabled ? "ENTER_MAINTENANCE" : "EXIT_MAINTENANCE";
+          const result = await api("/api/admin/maintenance", {enabled, confirm});
+          render(result);
+          renderAdminStatus(result.admin);
+          toast(enabled ? "Maintenance mode enabled" : "Maintenance mode disabled");
+        }
+      } catch (error) {
+        toast(error.message);
+        await refreshAdminStatus();
+      }
+    }
+    function beginAdminActionHold(event) {
+      const button = event.currentTarget;
+      if (button.disabled || (event.pointerType === "mouse" && event.button !== 0)) return;
+      clearTimeout(adminActionHoldTimer);
+      button.classList.add("holding");
+      adminActionHoldTimer = setTimeout(() => {
+        button.classList.remove("holding");
+        runAdminAction(button);
+      }, ADMIN_HOLD_MS);
+    }
+    function cancelAdminActionHold(event) {
+      clearTimeout(adminActionHoldTimer);
+      adminActionHoldTimer = null;
+      event.currentTarget.classList.remove("holding");
+    }
+    function openPowerConfirmation(action) {
+      pendingPowerAction = action;
+      const reboot = action === "reboot";
+      powerConfirmTitle.textContent = reboot ? "Reboot Raspberry Pi?" : "Shut down Raspberry Pi?";
+      powerConfirmMessage.textContent = reboot
+        ? "The production action will restart the Raspberry Pi."
+        : "The production action will turn off the Raspberry Pi.";
+      powerConfirmModal.classList.add("open");
+      powerConfirmModal.setAttribute("aria-hidden", "false");
+      powerConfirmCancel.focus();
+    }
+    function closePowerConfirmation() {
+      clearTimeout(powerConfirmTimer);
+      powerConfirmHold.classList.remove("holding");
+      powerConfirmModal.classList.remove("open");
+      powerConfirmModal.setAttribute("aria-hidden", "true");
+      pendingPowerAction = null;
+    }
+    function beginPowerConfirmation(event) {
+      if (!pendingPowerAction || (event.pointerType === "mouse" && event.button !== 0)) return;
+      clearTimeout(powerConfirmTimer);
+      powerConfirmHold.classList.add("holding");
+      powerConfirmTimer = setTimeout(runPowerAction, POWER_CONFIRM_HOLD_MS);
+    }
+    function cancelPowerConfirmation() {
+      clearTimeout(powerConfirmTimer);
+      powerConfirmTimer = null;
+      powerConfirmHold.classList.remove("holding");
+    }
+    async function runPowerAction() {
+      const action = pendingPowerAction;
+      const confirm = action === "reboot" ? "REBOOT_RASPBERRY_PI" : "SHUTDOWN_RASPBERRY_PI";
+      cancelPowerConfirmation();
+      try {
+        const result = await api(`/api/admin/power/${action}`, {confirm});
+        closePowerConfirmation();
+        toast(result.message);
+      } catch (error) {
+        closePowerConfirmation();
+        toast(error.message);
+        await refreshAdminStatus();
+      }
+    }
     function enterDashboard() {
       dashboardEntered = true;
       startScreen.classList.add("hidden");
       document.body.classList.remove("start-screen-active");
       prepareAudio();
       refresh();
+    }
+    function returnToStartScreen() {
+      dashboardEntered = false;
+      startScreen.classList.remove("hidden");
+      document.body.classList.add("start-screen-active");
+      adminTrigger.focus();
+    }
+    function beginDashboardLogoHold(event) {
+      if (event.pointerType === "mouse" && event.button !== 0) return;
+      clearTimeout(dashboardLogoHoldTimer);
+      dashboardLogo.classList.add("holding");
+      dashboardLogoHoldTimer = setTimeout(() => {
+        dashboardLogo.classList.remove("holding");
+        returnToStartScreen();
+      }, ADMIN_HOLD_MS);
+    }
+    function cancelDashboardLogoHold() {
+      clearTimeout(dashboardLogoHoldTimer);
+      dashboardLogoHoldTimer = null;
+      dashboardLogo.classList.remove("holding");
     }
     function prepareAudio() {
       if (!audioContext) {
@@ -487,47 +797,125 @@
     }
     function updateCountdown() {
       if (!current.play_duration) return;
+      if (playStartPending) {
+        setCountdownDisplay("preparing", "PREPARING…");
+        playCountdown.classList.remove("running", "time-up", "try-again", "stopped");
+        playCountdown.classList.add("get-ready");
+        machineStatus.textContent = "";
+        return;
+      }
       const running = current.play_mode !== null;
       const now = Date.now() / 1000;
       const getReady = running && current.countdown_starts_at && now < current.countdown_starts_at;
+      const startupStartsAt = current.countdown_starts_at
+        - current.ready_duration
+        - current.grabber_start_duration;
+      const startupElapsed = startupVisualStartedAt
+        ? now - startupVisualStartedAt
+        : now - startupStartsAt;
+      const preparingPrompt = getReady && startupElapsed >= 0
+        && startupElapsed < PREPARING_DISPLAY_SECONDS;
+      const readyPrompt = getReady
+        && startupElapsed >= PREPARING_DISPLAY_SECONDS
+        && startupElapsed < PREPARING_DISPLAY_SECONDS + READY_DISPLAY_SECONDS;
       const grabberStarting = getReady
-        && current.grabber_start_duration
-        && now >= current.countdown_starts_at - current.grabber_start_duration;
+        && startupElapsed >= PREPARING_DISPLAY_SECONDS + READY_DISPLAY_SECONDS
+        && startupElapsed < PREPARING_DISPLAY_SECONDS
+          + READY_DISPLAY_SECONDS
+          + GRABBER_START_DISPLAY_SECONDS;
+      const countdownPreview = getReady
+        && startupElapsed >= PREPARING_DISPLAY_SECONDS
+          + READY_DISPLAY_SECONDS
+          + GRABBER_START_DISPLAY_SECONDS;
       const remaining = running && current.play_ends_at
         ? Math.max(0, Math.ceil(current.play_ends_at - Date.now() / 1000))
         : current.play_duration;
+      if (running && current.play_ends_at && now >= current.play_ends_at) {
+        showTimeUp(current.play_ends_at);
+      }
       const timeUp = Date.now() < timeUpUntil;
+      const tryAgain = Date.now() >= timeUpUntil && Date.now() < tryAgainUntil;
       const stopped = Date.now() < stoppedUntil;
-      if (running && !getReady && remaining > 0 && remaining !== lastBeepSecond) {
+      const registrationNeeded = !running && !timeUp && !tryAgain
+        && !current.player_photo_ready;
+      if (
+        running
+        && (!getReady || countdownPreview)
+        && remaining > 0
+        && remaining !== lastBeepSecond
+      ) {
         lastBeepSecond = remaining;
         beep();
       }
       if (!running) lastBeepSecond = null;
-      countdownNumber.textContent = stopped
-        ? "CLAW MACHINE STOPPED"
-        : timeUp
-          ? "TIME UP!"
-          : grabberStarting
-            ? "GRABBER START"
-          : getReady
-            ? "ARE YOU READY!"
-            : remaining;
+      let displayPhase = running ? "running" : "idle";
+      let displayText = remaining;
+      if (stopped) {
+        displayPhase = "stopped";
+        displayText = "CLAW MACHINE STOPPED";
+      } else if (timeUp) {
+        displayPhase = "time-up";
+        displayText = "TIME UP!";
+      } else if (tryAgain) {
+        displayPhase = "try-again";
+        displayText = "TRY AGAIN!";
+      } else if (registrationNeeded) {
+        displayPhase = "registration";
+        displayText = "REGISTER PLAYER";
+      } else if (grabberStarting) {
+        displayPhase = "grabber";
+        displayText = "GRABBER START";
+      } else if (readyPrompt) {
+        displayPhase = "ready";
+        displayText = "ARE YOU READY!";
+      } else if (preparingPrompt) {
+        displayPhase = "preparing";
+        displayText = "PREPARING…";
+      } else if (countdownPreview) {
+        displayPhase = "countdown-preview";
+        displayText = remaining;
+      } else if (getReady) {
+        displayPhase = "preparing";
+        displayText = "PREPARING…";
+      }
+      setCountdownDisplay(displayPhase, displayText);
       countdownLabel.textContent = running ? "PLAYING" : "SECONDS";
-      playCountdown.classList.toggle("running", running && !timeUp && !stopped && !getReady);
+      playCountdown.classList.toggle(
+        "running",
+        running && !timeUp && !stopped && (!getReady || countdownPreview)
+      );
       playCountdown.classList.toggle("time-up", timeUp && !stopped);
-      playCountdown.classList.toggle("get-ready", getReady && !timeUp && !stopped);
+      playCountdown.classList.toggle("try-again", tryAgain && !stopped);
+      playCountdown.classList.toggle(
+        "get-ready",
+        (preparingPrompt || readyPrompt || grabberStarting || registrationNeeded)
+          && !timeUp && !stopped
+      );
       playCountdown.classList.toggle("stopped", stopped);
       machineStatus.textContent = stopped
         ? "Claw machine stopped"
         : timeUp
         ? "Time up · machine stopped"
-        : grabberStarting
-          ? "Grabber pulse sequence · countdown starts next"
-        : getReady
-          ? "Get ready · play is starting"
+        : tryAgain
+          ? "Ready for the next player"
+        : registrationNeeded
+          ? "Enter player name and take a photo"
+        : grabberStarting || readyPrompt || preparingPrompt || countdownPreview
+          ? ""
         : running
           ? `${current.machine_status} · stops in ${remaining} seconds`
           : `Ready · ${current.play_duration}-second play window`;
+    }
+    function setCountdownDisplay(phase, text) {
+      countdownNumber.textContent = text;
+      countdownDisplayPhase = phase;
+    }
+    function showTimeUp(playEndsAt) {
+      if (!playEndsAt || playEndsAt === lastTimeUpPlayEndsAt) return;
+      lastTimeUpPlayEndsAt = playEndsAt;
+      timeUpUntil = Date.now() + TIME_UP_DISPLAY_MS;
+      tryAgainUntil = timeUpUntil + TRY_AGAIN_DISPLAY_MS;
+      speak("Time up");
     }
     const api = async (path, body) => {
       const options = body === undefined ? {} : {
@@ -548,8 +936,7 @@
         && current.play_ends_at
         && Date.now() / 1000 >= current.play_ends_at - 1;
       if (countdownFinished) {
-        timeUpUntil = Date.now() + 5000;
-        speak("Time up");
+        showTimeUp(current.play_ends_at);
       }
       previousPlayMode = data.play_mode;
       current = data;
@@ -584,7 +971,8 @@
       blinkLeds.innerHTML = `<span class="led ${running ? "on" : ""}"></span>`;
       updateCountdown();
       document.querySelectorAll("button").forEach(button => {
-        if (!["testButton", "stopButton", "photoButton"].includes(button.id)) {
+        if (!["testButton", "stopButton", "photoButton", "adminLogin", "adminLogout"].includes(button.id)
+            && !button.hasAttribute("data-admin-action")) {
           button.disabled = false;
         }
       });
@@ -615,18 +1003,31 @@
         return;
       }
       prepareAudio();
+      timeUpUntil = 0;
+      tryAgainUntil = 0;
+      playStartPending = true;
+      startupVisualStartedAt = Date.now() / 1000;
+      updateCountdown();
       try {
-        render(await api("/api/play", {test}));
+        const result = await api("/api/play", {test});
+        playStartPending = false;
+        render(result);
         playerName.value = "";
         speak("Are you ready?");
         toast(test ? "Test signal sent" : "Play started");
       }
-      catch (error) { toast(error.message); }
+      catch (error) {
+        playStartPending = false;
+        startupVisualStartedAt = 0;
+        updateCountdown();
+        toast(error.message);
+      }
     }
     async function stopPlay() {
       try {
         render(await api("/api/stop", {}));
         timeUpUntil = 0;
+        tryAgainUntil = 0;
         stoppedUntil = Date.now() + 5000;
         updateCountdown();
         glassBreakSound();
@@ -698,6 +1099,12 @@
       }
     }
     async function refresh() {
+      if (
+        startupVisualStartedAt
+        && Date.now() / 1000 - startupVisualStartedAt < STARTUP_DISPLAY_TOTAL_SECONDS
+      ) {
+        return;
+      }
       try {
         render(await api("/api/status"));
       } catch (_) {}
@@ -707,6 +1114,43 @@
         navigator.serviceWorker.register("/service-worker.js").catch(() => {});
       });
     }
+    adminTrigger.addEventListener("pointerdown", beginAdminHold);
+    ["pointerup", "pointercancel", "pointerleave"].forEach(eventName => {
+      adminTrigger.addEventListener(eventName, cancelAdminHold);
+    });
+    adminTrigger.addEventListener("contextmenu", event => event.preventDefault());
+    dashboardLogo.addEventListener("pointerdown", beginDashboardLogoHold);
+    ["pointerup", "pointercancel", "pointerleave"].forEach(eventName => {
+      dashboardLogo.addEventListener(eventName, cancelDashboardLogoHold);
+    });
+    dashboardLogo.addEventListener("contextmenu", event => event.preventDefault());
+    adminClose.addEventListener("click", closeAdminMenu);
+    adminLogin.addEventListener("click", loginAdmin);
+    adminLogout.addEventListener("click", logoutAdmin);
+    adminPin.addEventListener("keydown", event => {
+      if (event.key === "Enter" && !adminLogin.disabled) loginAdmin();
+    });
+    [adminExitKiosk, adminRestartKiosk, adminMaintenance, adminStopGame].forEach(button => {
+      button.addEventListener("pointerdown", beginAdminActionHold);
+      ["pointerup", "pointercancel", "pointerleave"].forEach(eventName => {
+        button.addEventListener(eventName, cancelAdminActionHold);
+      });
+      button.addEventListener("contextmenu", event => event.preventDefault());
+    });
+    adminReboot.addEventListener("click", () => openPowerConfirmation("reboot"));
+    adminShutdown.addEventListener("click", () => openPowerConfirmation("poweroff"));
+    powerConfirmCancel.addEventListener("click", closePowerConfirmation);
+    powerConfirmHold.addEventListener("pointerdown", beginPowerConfirmation);
+    ["pointerup", "pointercancel", "pointerleave"].forEach(eventName => {
+      powerConfirmHold.addEventListener(eventName, cancelPowerConfirmation);
+    });
+    powerConfirmHold.addEventListener("contextmenu", event => event.preventDefault());
+    adminModal.addEventListener("click", event => {
+      if (event.target === adminModal) closeAdminMenu();
+    });
+    document.addEventListener("keydown", event => {
+      if (event.key === "Escape" && adminModal.classList.contains("open")) closeAdminMenu();
+    });
     startBrowserCamera();
     refresh(); refreshCloudStatus();
     setInterval(refresh, 2000); setInterval(updateCountdown, 200); setInterval(refreshCloudStatus, 10000);

@@ -21,15 +21,32 @@ from vision.detection_cache import shared_detection_cache
 
 configure_logging()
 _DASHBOARD_ROOT = Path(__file__).resolve().parents[1]
+
+
+def _positive_int_env(name: str, default: int) -> int:
+    try:
+        return max(1, int(os.getenv(name, str(default))))
+    except ValueError:
+        return default
+
+
 app = Flask(
     __name__,
     static_folder=str(_DASHBOARD_ROOT / "assets" / "static"),
     template_folder=str(_DASHBOARD_ROOT / "frontend" / "templates"),
 )
+app.secret_key = os.getenv("PROGRESS_CLAW_SECRET_KEY")
+app.config.update(
+    ADMIN_PIN=os.getenv("PROGRESS_CLAW_ADMIN_PIN"),
+    ADMIN_SESSION_SECONDS=_positive_int_env("PROGRESS_CLAW_ADMIN_SESSION_SECONDS", 300),
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="Strict",
+)
 dashboard_state.initialize_paths(app)
 dashboard_state.set_app_logger(app.logger)
 
 from dashboard.backend.routes_api import bp as api_bp
+from dashboard.backend.routes_admin import bp as admin_bp
 from dashboard.backend.routes_camera import bp as camera_bp
 from dashboard.backend.routes_player import bp as player_bp
 from dashboard.backend.routes_system import bp as system_bp
@@ -48,6 +65,7 @@ recommendation_engine = RecommendationEngine(
     config=load_recommendation_config(),
 )
 app.register_blueprint(system_bp)
+app.register_blueprint(admin_bp)
 app.register_blueprint(camera_bp)
 app.register_blueprint(api_bp)
 app.register_blueprint(player_bp)

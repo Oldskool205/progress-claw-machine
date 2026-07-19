@@ -33,6 +33,7 @@ class GpioArduinoAdapter:
     _start_output: object | None = field(default=None, init=False, repr=False)
     _power_outputs: list[object] = field(default_factory=list, init=False, repr=False)
     _mock_log: list[str] = field(default_factory=list, init=False, repr=False)
+    _connection_error: str | None = field(default=None, init=False, repr=False)
 
     @classmethod
     def from_env(cls) -> "GpioArduinoAdapter":
@@ -52,23 +53,31 @@ class GpioArduinoAdapter:
 
     @property
     def mock_mode(self) -> bool:
-        return self.force_mock or self._start_output is None
+        return self.force_mock
 
     @property
     def connected(self) -> bool:
         self.connect()
-        return not self.mock_mode
+        return self._outputs_ready()
 
     @property
     def mock_commands(self) -> tuple[str, ...]:
         return tuple(self._mock_log)
 
     def connect(self) -> None:
-        if self.force_mock or self._start_output is not None:
+        if self.force_mock:
             return
+        if self._outputs_ready():
+            return
+        if self._start_output is not None or self._power_outputs:
+            LOGGER.warning(
+                "gpio_outputs_lost",
+                extra={"event": "gpio_outputs_lost"},
+            )
+            self.close()
         factory = self.output_device_factory or OutputDevice
         if factory is None:
-            self.force_mock = True
+            self._connection_error = "gpiozero OutputDevice is unavailable"
             LOGGER.warning("gpio_library_unavailable", extra={"event": "gpio_library_unavailable"})
             return
         try:
@@ -76,10 +85,12 @@ class GpioArduinoAdapter:
             self._start_output = factory(
                 self.start_pin, active_high=False, initial_value=False
             )
-            self._power_outputs = [
-                factory(pin, active_high=True, initial_value=False)
-                for pin in self.power_pins
-            ]
+            self._power_outputs = []
+            for pin in self.power_pins:
+                self._power_outputs.append(
+                    factory(pin, active_high=True, initial_value=False)
+                )
+            self._connection_error = None
             LOGGER.info(
                 "gpio_connected",
                 extra={
@@ -89,12 +100,27 @@ class GpioArduinoAdapter:
                 },
             )
         except Exception as error:  # pragma: no cover - hardware dependent
+            self._connection_error = str(error)
             self.close()
-            self.force_mock = True
             LOGGER.warning(
                 "gpio_connect_failed",
                 extra={"event": "gpio_connect_failed", "error": str(error)},
             )
+
+    def _outputs_ready(self) -> bool:
+        outputs = (
+            [self._start_output] if self._start_output is not None else []
+        ) + self._power_outputs
+        if len(outputs) != 1 + len(self.power_pins):
+            return False
+        for output in outputs:
+            if getattr(output, "closed", False):
+                return False
+            pin = getattr(output, "pin", None)
+            function = getattr(pin, "function", None)
+            if function is not None and function != "output":
+                return False
+        return True
 
     def close(self) -> None:
         outputs = ([self._start_output] if self._start_output is not None else []) + self._power_outputs
@@ -110,10 +136,13 @@ class GpioArduinoAdapter:
         command = command.strip()
         if not command:
             return ArduinoResponse(False, "ERR EMPTY_COMMAND", self.mock_mode)
-        self.connect()
-        if self.mock_mode:
+        if self.force_mock:
             self._mock_log.append(command)
             return ArduinoResponse(True, f"OK MOCK {command}", True)
+        self.connect()
+        if not self._outputs_ready():
+            detail = self._connection_error or "GPIO outputs are unavailable"
+            return ArduinoResponse(False, f"ERR GPIO unavailable: {detail}", False)
 
         try:
             if command.startswith("CLAW POWER "):

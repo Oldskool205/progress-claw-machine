@@ -1,0 +1,26 @@
+#!/usr/bin/env python3
+"""Root helper restricted to Raspberry Pi reboot and poweroff."""
+
+import os
+import subprocess
+import sys
+
+COMMANDS = {
+    "reboot": ["/usr/bin/systemctl", "reboot"],
+    "poweroff": ["/usr/bin/systemctl", "poweroff"],
+}
+
+
+def main() -> int:
+    if os.geteuid() != 0:
+        print("progress-claw-power must run as root", file=sys.stderr)
+        return 77
+    if len(sys.argv) != 2 or sys.argv[1] not in COMMANDS:
+        print("usage: progress-claw-power {reboot|poweroff}", file=sys.stderr)
+        return 64
+    subprocess.run(COMMANDS[sys.argv[1]], check=True)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

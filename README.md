@@ -216,8 +216,10 @@ PROGRESS_CLAW_RUN_LIVE_TESTS=1 \
   .venv/bin/python -m unittest tests.live.cloud_live_test -v
 ```
 
-Latest verification on 2026-07-16: 90 tests passed and the opt-in live test was
-skipped. The read-only Supabase connection/schema diagnostic also passed.
+Latest verification on 2026-07-19: 127 automated tests passed. Supervised
+Raspberry Pi validation also confirmed real GPIO idle levels, Chromium kiosk
+recovery, and the protected reboot and shutdown workflows through the
+least-privilege power helper.
 
 ## Documentation
 
@@ -279,3 +281,162 @@ The initial safe migration pass has been executed.
 - Mock mode verifies backend command flow but cannot validate real motors, limit switches, relays, or timing behavior.
 - Phase A.1 cloud synchronization remains operator-triggered; automatic
   production scheduling and retention policy are not implemented yet.
+
+## Phase 5 Planned Kiosk Mode
+
+Phase 5 is being implemented incrementally. Step 1 adds an opt-in Chromium kiosk
+launcher and an independent systemd service; neither is installed or enabled
+automatically. The existing dashboard backend, frontend, API, and runtime service
+are unchanged. The kiosk browser runs separately so an operator can exit
+fullscreen display mode without stopping machine services.
+
+### Implementation progress
+
+- [x] Step 1: Add the isolated kiosk launcher, service definition, and
+  configuration tests.
+- [x] Step 2: Add the press-and-hold protected touchscreen administration UI
+  preview with inactive system controls.
+- [x] Step 3A: Add short-lived backend PIN authentication, failed-attempt rate
+  limiting, and Lock/Logout without exposing system commands.
+- [x] Step 3B: Add authenticated, press-and-hold safe game-stop and
+  maintenance-mode workflows through the existing controller stop path.
+- [x] Step 3C1: Add authenticated, press-and-hold kiosk exit without stopping
+  the dashboard backend or using privileged process commands.
+- [x] Step 3C2: Add authenticated, press-and-hold kiosk restart that replaces
+  only the Chromium child process.
+- [x] Step 3C3A: Add double-confirmed Raspberry Pi reboot and shutdown safety
+  simulation with no operating-system command execution.
+- [x] Step 3C3B: Add the opt-in least-privilege Raspberry Pi power helper and
+  live executor with exact reboot/poweroff allowlists.
+- [x] Step 3C3C: Install the reviewed helper and perform supervised reboot, then
+  supervised shutdown validation.
+- [ ] Step 4: Perform supervised Raspberry Pi touchscreen validation.
+
+Step 1 files:
+
+- `scripts/kiosk/start_kiosk.sh`
+- `system/progress-claw-kiosk.service`
+- `tests/unit/test_kiosk_config.py`
+
+The launcher starts only Chromium and never starts, stops, or restarts the
+dashboard backend. Its default URL is `http://localhost:5000/`; deployments may
+override it with `PROGRESS_CLAW_KIOSK_URL` in the existing environment file.
+
+Step 2 adds a touchscreen administrator modal opened by holding the settings
+button for 1.8 seconds. It includes the planned PIN field and system-action
+buttons, but they are deliberately disabled. No admin API, PIN validation,
+`systemctl`, reboot, shutdown, GPIO, or Arduino command is connected in this
+step. This allows the layout and touch interaction to be reviewed safely before
+privileged workflows are implemented.
+
+Step 3A connects only administrator authentication. Configure it locally with
+`PROGRESS_CLAW_ADMIN_PIN` (4–8 digits) and a strong random
+`PROGRESS_CLAW_SECRET_KEY`; real values must never be committed. Successful
+authentication creates a five-minute signed session by default, configurable
+with `PROGRESS_CLAW_ADMIN_SESSION_SECONDS`. Five failed attempts from one client
+within five minutes temporarily block further login attempts. Lock/Logout clears
+the session immediately. All system-action buttons remain disabled, and no
+system service, reboot, shutdown, GPIO, or Arduino command is exposed by Step 3A.
+
+Step 3B enables only **Stop current game** and **Enter/Exit maintenance** after
+administrator authentication. Both touchscreen actions require a 1.8-second
+press-and-hold and an explicit API confirmation token. Entering maintenance
+safely stops an active game through the existing controller-owned stop flow,
+blocks new dashboard plays, and writes the admin action to the dashboard event
+log. Exiting maintenance allows new plays again. Kiosk exit, service restart,
+Raspberry Pi reboot, and shutdown remain disabled.
+
+Step 3C1 enables **Exit kiosk** only when the administrator is authenticated and
+the machine is not running. A 1.8-second press-and-hold sends an explicit
+`EXIT_KIOSK` confirmation to the backend. The backend writes a private exit
+request under `$XDG_RUNTIME_DIR/progress-claw/`; the independent launcher sees
+the request and terminates only the Chromium process that it started. It does
+not use `pkill`, `killall`, `systemctl`, or stop the dashboard/controller. Kiosk
+restart, Raspberry Pi reboot, and shutdown remain disabled.
+
+Step 3C2 enables **Restart kiosk** only when the administrator is authenticated
+and the machine is not running. The private request channel sends `restart` to
+the launcher, which terminates only its current Chromium child and starts a new
+Chromium child with the same kiosk URL and flags. The dashboard backend,
+controller, and game state remain running. The workflow does not use
+`systemctl`, `pkill`, `killall`, reboot, or shutdown. Raspberry Pi reboot and
+shutdown remain disabled.
+
+Step 3C3A enables reboot and shutdown **simulation** only when the administrator
+is authenticated, the machine is idle, and maintenance mode is active. Each
+action opens a separate warning modal and requires a three-second press-and-hold
+with an action-specific API confirmation. The mock executor records the audit
+request and always reports `executed: false`; it contains no subprocess, shell,
+systemd, reboot, or poweroff execution path. Connecting real operating-system
+power control is deferred to the separately reviewed Step 3C3B.
+
+Step 3C3B adds an opt-in live executor and root helper. The helper accepts
+exactly `reboot` or `poweroff` and maps them to fixed absolute `systemctl`
+commands; arbitrary arguments and shell execution are unavailable. The
+dashboard remains unprivileged and invokes the helper through an exact sudoers
+allowlist. Live mode requires explicit local configuration with
+`PROGRESS_CLAW_POWER_MODE=live`; the repository default remains `mock`. Adding
+the files does not install the helper or execute a power action. Supervised
+installation and real-device validation are tracked separately as Step 3C3C.
+
+On the development Raspberry Pi, the helper was installed to
+`/usr/local/sbin/progress-claw-power` and its sudoers file parsed successfully.
+The installed helper matched the repository copy, and an unsupported action was
+rejected without a power operation. This machine already has a pre-existing
+`NOPASSWD: ALL` rule for user `araya`; that broader host rule should be removed
+in a separately reviewed system-hardening task. Progress Claw still invokes
+only the fixed helper allowlist.
+
+Step 3C3C was completed under supervision on 2026-07-19. Before each operation,
+the controller reported idle with no emergency stop, GPIO 17 released the
+active-low play gate, and GPIOs 22, 23, and 24 were low. The protected admin API
+successfully authenticated, entered maintenance mode, verified the machine was
+not running, and invoked the exact allowlisted helper action. The reboot stopped
+the dashboard and kiosk cleanly and both services recovered automatically. The
+subsequent shutdown powered the Pi off cleanly; after power was restored, the
+dashboard, kiosk, camera, real GPIO/Arduino transport, and safe output levels all
+recovered with no failed systemd units.
+
+### Touchscreen operation
+
+- Chromium fullscreen startup at `http://localhost:5000/`.
+- Large touch-friendly buttons and readable text.
+- No dependence on a keyboard, mouse, hover action, or right-click.
+- Protection against accidental zooming, text selection, and page navigation.
+- Visible network, Arduino, camera, cloud, and machine status.
+- Clear loading, success, warning, and error messages.
+
+### Protected admin controls
+
+- A hidden or PIN-protected admin menu.
+- Controls to stop the current game safely, stop or restart machine services,
+  restart the kiosk browser, and resume normal operation.
+- Maintenance mode that prevents new games from starting.
+- A protected **Exit kiosk** control that returns to the normal desktop.
+- Protected Raspberry Pi reboot and safe-shutdown controls.
+- An emergency-stop control with a clear latched-state warning.
+- Confirmation prompts for game stop, service stop, reboot, shutdown, and
+  emergency actions.
+
+### Safety requirements
+
+- Stop motors and release hardware outputs before stopping services or shutting
+  down the Raspberry Pi.
+- Block normal shutdown while hardware is moving; emergency override behavior
+  must remain available and fail safe.
+- Require a PIN and press-and-hold confirmation for dangerous touchscreen
+  actions.
+- Keep the physical emergency-stop control independent of the touchscreen.
+- Record protected admin actions and shutdown reasons in logs.
+- Recover safely after power loss, a browser crash, or an unexpected service
+  restart.
+- Keep the kiosk browser separate from the dashboard backend service.
+
+### Recovery and normal desktop mode
+
+- `Alt+F4` as the normal keyboard exit method.
+- A terminal recovery path using `pkill chromium` if the browser does not close.
+- A separately managed kiosk autostart or systemd service that can be disabled
+  with `sudo systemctl disable --now progress-claw-kiosk.service` to restore
+  normal desktop startup.
+- Restarting or stopping the kiosk service must not stop the dashboard backend.

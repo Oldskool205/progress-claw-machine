@@ -33,6 +33,8 @@ def api_play_start():
         test_mode=bool(data.get("test", False)),
     )
     with lock:
+        if state["maintenance_mode"]:
+            return jsonify({"ok": False, "error": "Machine is in maintenance mode"}), 409
         try:
             result = runtime_controller.start_play(command)
         except SafetyError as error:
@@ -184,6 +186,8 @@ def play():
 
     with lock:
         refresh_arduino_connection()
+        if state["maintenance_mode"]:
+            return jsonify({"ok": False, "error": "Machine is in maintenance mode"}), 409
         if not state["machine_enabled"]:
             return jsonify({"ok": False, "error": "Machine is disabled"}), 409
         if state["play_mode"] is not None:
@@ -196,33 +200,29 @@ def play():
         if not test_mode and state["credits"] < 1:
             return jsonify({"ok": False, "error": "No play credit available"}), 409
 
+        play_duration = play_duration_seconds(state["play_duration"])
+        state["play_duration"] = play_duration
+        try:
+            controller_result = trigger_play(play_duration, test_mode=test_mode)
+        except SafetyError as error:
+            return controller_error_response(error)
+        sent = not controller_result["mock_arduino"]
+
         if state["players"]:
             state["players"][0]["status"] = "Tested" if test_mode else "Played"
         if not test_mode:
             state["credits"] -= 1
-        state["player_photo_ready"] = False
-        state["current_player_name"] = None
-        if not test_mode:
             state["plays_today"] += 1
             state["last_play"] = datetime.now().strftime("%H:%M:%S")
+        state["player_photo_ready"] = False
+        state["current_player_name"] = None
         state["play_mode"] = "test" if test_mode else "play"
-        play_duration = play_duration_seconds(state["play_duration"])
-        state["play_duration"] = play_duration
-        state["countdown_starts_at"] = (
-            time.time() + READY_DURATION_SECONDS + GRABBER_START_DURATION_SECONDS
-        )
-        state["play_ends_at"] = state["countdown_starts_at"] + play_duration
+        state["play_ends_at"] = controller_result["play_ends_at"]
+        state["countdown_starts_at"] = state["play_ends_at"] - play_duration
         if state["arduino_connected"]:
             state["machine_status"] = "Getting ready"
         else:
             state["machine_status"] = "Test simulation" if test_mode else "Simulation"
-        try:
-            sent = trigger_play(play_duration)
-        except SafetyError as error:
-            state["play_mode"] = None
-            state["countdown_starts_at"] = None
-            state["play_ends_at"] = None
-            return controller_error_response(error)
         label = "Test play" if test_mode else "Play"
         add_event(
             f"{label} activated" + ("" if sent else " (simulation mode)"),
