@@ -310,7 +310,8 @@ fullscreen display mode without stopping machine services.
   live executor with exact reboot/poweroff allowlists.
 - [x] Step 3C3C: Install the reviewed helper and perform supervised reboot, then
   supervised shutdown validation.
-- [ ] Step 4: Perform supervised Raspberry Pi touchscreen validation.
+- [ ] Step 4 (deferred 2026-07-19): Perform supervised Raspberry Pi
+  touchscreen validation when a USB touch interface is available.
 
 Step 1 files:
 
@@ -322,12 +323,12 @@ The launcher starts only Chromium and never starts, stops, or restarts the
 dashboard backend. Its default URL is `http://localhost:5000/`; deployments may
 override it with `PROGRESS_CLAW_KIOSK_URL` in the existing environment file.
 
-Step 2 adds a touchscreen administrator modal opened by holding the settings
-button for 1.8 seconds. It includes the planned PIN field and system-action
-buttons, but they are deliberately disabled. No admin API, PIN validation,
-`systemctl`, reboot, shutdown, GPIO, or Arduino command is connected in this
-step. This allows the layout and touch interaction to be reviewed safely before
-privileged workflows are implemented.
+Step 2 adds a touchscreen administrator modal opened by holding the centered
+Steaming Club logo on the start screen for 1.8 seconds. It includes the planned
+PIN field and system-action buttons, but they are deliberately disabled. No
+admin API, PIN validation, `systemctl`, reboot, shutdown, GPIO, or Arduino
+command is connected in this step. This allows the layout and interaction to be
+reviewed safely before privileged workflows are implemented.
 
 Step 3A connects only administrator authentication. Configure it locally with
 `PROGRESS_CLAW_ADMIN_PIN` (4–8 digits) and a strong random
@@ -396,6 +397,19 @@ the dashboard and kiosk cleanly and both services recovered automatically. The
 subsequent shutdown powered the Pi off cleanly; after power was restored, the
 dashboard, kiosk, camera, real GPIO/Arduino transport, and safe output levels all
 recovered with no failed systemd units.
+
+Step 4 was started under supervision on 2026-07-19 and then explicitly deferred.
+The 1920x1080 Chromium kiosk, dashboard and administrator-panel layouts, PIN
+unlock, safety-based button gating, and maintenance-mode workflow were checked
+with a mouse. Linux exposed no absolute touchscreen or
+`ID_INPUT_TOUCHSCREEN` device; USB enumeration showed only the existing camera,
+Arduino serial adapter, and hub, even after the proposed touch cable was
+connected. Mouse checks therefore do not count as touchscreen validation. No
+kiosk or power action was executed during this attempt. The machine was returned
+to Ready with maintenance disabled, no game running, GPIO 17 released, and GPIOs
+22, 23, and 24 low. Touch accuracy, calibration, on-screen PIN entry,
+press-and-hold targeting, and protected kiosk/power controls remain deferred
+until a data-capable USB touch interface is detected.
 
 ### Touchscreen operation
 
