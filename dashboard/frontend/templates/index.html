@@ -344,6 +344,20 @@
     .admin-actions { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:20px; }
     .admin-actions button { min-height:58px; }
     .admin-actions button.holding { border:1px solid var(--yellow); color:var(--yellow); }
+    .admin-wifi {
+      margin-top:22px; padding-top:20px; border-top:1px solid #30354e;
+    }
+    .admin-wifi[hidden] { display:none; }
+    .admin-wifi h3 { margin:0 0 4px; }
+    .wifi-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:14px; }
+    .wifi-grid label { display:block; }
+    .wifi-grid input, .wifi-grid select { width:100%; margin-top:7px; }
+    .wifi-network-row { display:grid; grid-template-columns:1fr auto; gap:10px; }
+    .wifi-network-row button { min-width:92px; margin-top:7px; }
+    .wifi-password-row { display:flex; gap:8px; align-items:center; margin-top:8px; }
+    .wifi-password-row input { width:auto; margin:0; }
+    .wifi-connect { width:100%; min-height:58px; margin-top:14px; }
+    .wifi-connect.holding { outline:3px solid var(--yellow); color:var(--yellow); }
     .power-confirm-modal {
       position:fixed; inset:0; z-index:50; display:none; place-items:center; padding:20px;
       background:#050812f2; backdrop-filter:blur(14px);
@@ -367,6 +381,7 @@
       header { align-items:flex-start; flex-wrap:wrap; }.status { font-size:0; }.status .dot { margin:0; }
       .player-panel { order:3; width:100%; justify-content:flex-end; }
       .admin-actions { grid-template-columns:1fr; }
+      .wifi-grid { grid-template-columns:1fr; }
     }
   </style>
 </head>
@@ -406,6 +421,9 @@
         <canvas id="captureCanvas" hidden></canvas>
       </div>
       <div class="status-group">
+        <a class="cloud-status" href="/analytics" title="Open read-only machine analytics">
+          <span>Analytics</span>
+        </a>
         <a class="cloud-status" href="/cloud" title="Open Phase A Supabase cloud monitor">
           <svg class="supabase-icon" viewBox="0 0 24 24" aria-hidden="true">
             <path fill="currentColor" d="M13.4 2.4a1 1 0 0 0-1.8-.1L4.2 13.1a1 1 0 0 0 .8 1.6h6l-.8 6.7a1 1 0 0 0 1.8.7l7.8-11.3a1 1 0 0 0-.8-1.6h-6.1l.5-6.8Z"/>
@@ -498,6 +516,41 @@
         <button id="adminReboot" type="button" data-admin-action="reboot" disabled>Reboot Raspberry Pi</button>
         <button id="adminShutdown" type="button" data-admin-action="poweroff" disabled>Shut down Raspberry Pi</button>
       </div>
+      <section id="adminWifi" class="admin-wifi" aria-labelledby="adminWifiTitle" hidden>
+        <h3 id="adminWifiTitle">Wi-Fi settings</h3>
+        <div id="wifiModeLabel" class="label">Protected Wi-Fi simulation</div>
+        <div id="wifiStatus" class="admin-notice" role="status">
+          Unlock administrator mode to view Wi-Fi settings.
+        </div>
+        <div class="wifi-grid">
+          <label for="wifiNetworks">
+            <span class="label">AVAILABLE NETWORKS</span>
+            <span class="wifi-network-row">
+              <select id="wifiNetworks" disabled>
+                <option value="">Enter a network manually</option>
+              </select>
+              <button id="wifiScan" type="button" disabled>Scan</button>
+            </span>
+          </label>
+          <label for="wifiSsid">
+            <span class="label">NETWORK NAME (SSID)</span>
+            <input id="wifiSsid" type="text" maxlength="32" autocomplete="off"
+                   spellcheck="false" placeholder="Wi-Fi network name" disabled>
+          </label>
+          <label for="wifiPassword">
+            <span class="label">WI-FI PASSWORD</span>
+            <input id="wifiPassword" type="password" minlength="8" maxlength="63"
+                   autocomplete="off" placeholder="8–63 characters" disabled>
+            <span class="wifi-password-row">
+              <input id="wifiShowPassword" type="checkbox" disabled>
+              <span>Show password</span>
+            </span>
+          </label>
+        </div>
+        <button id="wifiConnect" class="wifi-connect" type="button" disabled>
+          Hold 3 seconds to test Wi-Fi connection
+        </button>
+      </section>
     </div>
   </section>
   <section id="powerConfirmModal" class="power-confirm-modal" role="alertdialog"
@@ -529,6 +582,8 @@
     let dashboardLogoHoldTimer = null;
     let adminActionHoldTimer = null;
     let powerConfirmTimer = null;
+    let wifiConnectTimer = null;
+    let wifiConnectPending = false;
     let pendingPowerAction = null;
     let countdownDisplayPhase = null;
     let playStartPending = false;
@@ -552,6 +607,9 @@
     function closeAdminMenu() {
       adminModal.classList.remove("open");
       adminModal.setAttribute("aria-hidden", "true");
+      wifiPassword.value = "";
+      wifiShowPassword.checked = false;
+      wifiPassword.type = "password";
       adminTrigger.focus();
     }
     function beginAdminHold(event) {
@@ -581,6 +639,20 @@
       adminShutdown.disabled = powerActionDisabled;
       adminMaintenance.textContent = status.maintenance_mode ? "Exit maintenance" : "Enter maintenance";
       adminMaintenance.dataset.enabled = status.maintenance_mode ? "true" : "false";
+      adminWifi.hidden = !status.authenticated;
+      wifiScan.disabled = !status.authenticated;
+      wifiNetworks.disabled = !status.authenticated;
+      const wifiChangeDisabled = !status.authenticated || status.machine_running || !status.maintenance_mode;
+      wifiSsid.disabled = wifiChangeDisabled;
+      wifiPassword.disabled = wifiChangeDisabled;
+      wifiShowPassword.disabled = wifiChangeDisabled;
+      wifiConnect.disabled = wifiChangeDisabled || wifiConnectPending;
+      wifiConnect.textContent = status.wifi_mode === "live"
+        ? "Hold 3 seconds to connect Wi-Fi"
+        : "Hold 3 seconds to test Wi-Fi connection";
+      wifiModeLabel.textContent = status.wifi_mode === "live"
+        ? "Protected live Wi-Fi controls"
+        : "Protected Wi-Fi simulation";
       const livePower = status.power_mode === "live";
       powerModeNotice.textContent = livePower
         ? "LIVE MODE — this action will operate the Raspberry Pi."
@@ -592,6 +664,63 @@
       } else {
         adminNotice.textContent = "Enter the administrator PIN to enable protected controls.";
       }
+      if (status.authenticated) {
+        refreshWifiStatus().catch(error => { wifiStatus.textContent = error.message; });
+      } else {
+        wifiPassword.value = "";
+        wifiStatus.textContent = "Unlock administrator mode to view Wi-Fi settings.";
+      }
+    }
+    async function refreshWifiStatus() {
+      const status = await api("/api/admin/wifi/status");
+      wifiStatus.textContent = status.mode === "mock"
+        ? "SIMULATION MODE — credentials will be validated, but Wi-Fi will not change."
+        : status.message;
+    }
+    async function scanWifiNetworks() {
+      try {
+        const result = await api("/api/admin/wifi/networks");
+        wifiNetworks.replaceChildren(new Option("Enter a network manually", ""));
+        result.networks.forEach(network => {
+          wifiNetworks.add(new Option(network.ssid, network.ssid));
+        });
+        wifiStatus.textContent = result.message;
+      } catch (error) { wifiStatus.textContent = error.message; }
+    }
+    async function simulateWifiConnect() {
+      if (wifiConnectPending) return;
+      wifiConnectPending = true;
+      wifiConnect.disabled = true;
+      const ssid = wifiSsid.value;
+      const password = wifiPassword.value;
+      wifiPassword.value = "";
+      try {
+        const result = await api("/api/admin/wifi/connect", {
+          ssid, password, confirm:"CONNECT_WIFI"
+        });
+        wifiStatus.textContent = result.message;
+        toast(result.executed ? "Wi-Fi connection completed" : "Wi-Fi request simulated; network unchanged");
+      } catch (error) {
+        wifiStatus.textContent = error.message;
+        toast(error.message);
+      } finally {
+        wifiConnectPending = false;
+        await refreshAdminStatus();
+      }
+    }
+    function beginWifiConnectHold(event) {
+      if (wifiConnect.disabled || (event.pointerType === "mouse" && event.button !== 0)) return;
+      clearTimeout(wifiConnectTimer);
+      wifiConnect.classList.add("holding");
+      wifiConnectTimer = setTimeout(() => {
+        wifiConnect.classList.remove("holding");
+        simulateWifiConnect();
+      }, POWER_CONFIRM_HOLD_MS);
+    }
+    function cancelWifiConnectHold() {
+      clearTimeout(wifiConnectTimer);
+      wifiConnectTimer = null;
+      wifiConnect.classList.remove("holding");
     }
     async function refreshAdminStatus() {
       try {
@@ -1139,6 +1268,18 @@
     });
     adminReboot.addEventListener("click", () => openPowerConfirmation("reboot"));
     adminShutdown.addEventListener("click", () => openPowerConfirmation("poweroff"));
+    wifiScan.addEventListener("click", scanWifiNetworks);
+    wifiNetworks.addEventListener("change", () => {
+      if (wifiNetworks.value) wifiSsid.value = wifiNetworks.value;
+    });
+    wifiShowPassword.addEventListener("change", () => {
+      wifiPassword.type = wifiShowPassword.checked ? "text" : "password";
+    });
+    wifiConnect.addEventListener("pointerdown", beginWifiConnectHold);
+    ["pointerup", "pointercancel", "pointerleave"].forEach(eventName => {
+      wifiConnect.addEventListener(eventName, cancelWifiConnectHold);
+    });
+    wifiConnect.addEventListener("contextmenu", event => event.preventDefault());
     powerConfirmCancel.addEventListener("click", closePowerConfirmation);
     powerConfirmHold.addEventListener("pointerdown", beginPowerConfirmation);
     ["pointerup", "pointercancel", "pointerleave"].forEach(eventName => {

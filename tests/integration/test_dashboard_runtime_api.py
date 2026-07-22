@@ -31,8 +31,19 @@ class DashboardRuntimeApiTest(unittest.TestCase):
         page = response.get_data(as_text=True)
         self.assertIn("Supabase", page)
         self.assertIn('href="/cloud"', page)
+        self.assertIn('href="/analytics"', page)
         self.assertNotIn("Hacker", page)
         self.assertEqual(self.client.post("/api/hacker", json={}).status_code, 404)
+
+    def test_read_only_analytics_dashboard_is_available(self):
+        page = self.client.get("/analytics")
+        events = self.client.get("/analytics/events")
+
+        self.assertEqual(page.status_code, 200)
+        self.assertIn("Machine Analytics", page.get_data(as_text=True))
+        self.assertEqual(events.status_code, 200)
+        self.assertIn("events", events.get_json())
+        self.assertEqual(self.client.post("/analytics/events", json={}).status_code, 405)
 
     def test_dashboard_admin_preview_has_no_active_system_actions(self):
         response = self.client.get("/")
@@ -76,6 +87,12 @@ class DashboardRuntimeApiTest(unittest.TestCase):
         self.assertIn("/api/admin/exit-kiosk", page)
         self.assertIn("/api/admin/restart-kiosk", page)
         self.assertIn("/api/admin/power/${action}", page)
+        self.assertIn('id="adminWifi"', page)
+        self.assertIn("/api/admin/wifi/status", page)
+        self.assertIn("/api/admin/wifi/networks", page)
+        self.assertIn("/api/admin/wifi/connect", page)
+        self.assertIn("CONNECT_WIFI", page)
+        self.assertIn("SIMULATION MODE", page)
         self.assertNotIn("/api/admin/shutdown", page)
         self.assertNotIn("/api/admin/reboot", page)
         self.assertNotIn("systemctl", page)

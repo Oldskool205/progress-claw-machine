@@ -6,6 +6,11 @@ from flask import Blueprint, jsonify, request
 
 from dashboard.backend import admin_auth
 from dashboard.backend import kiosk_control
+from dashboard.backend.wifi_control import (
+    WifiControlError,
+    WifiValidationError,
+    wifi_manager,
+)
 from dashboard.backend.system_power import power_executor
 from controller.safety.validator import SafetyError
 from dashboard.backend.dashboard_state import (
@@ -26,6 +31,7 @@ def _status_payload():
         maintenance_mode=state["maintenance_mode"],
         machine_running=state["play_mode"] is not None,
         power_mode=power_executor.mode,
+        wifi_mode=wifi_manager.mode,
     )
     return payload
 
@@ -168,3 +174,44 @@ def request_power_action(action):
                 "message": message,
             }
         )
+
+
+@bp.route("/api/admin/wifi/status", methods=["GET"])
+@admin_auth.require_admin
+def wifi_status():
+    try:
+        return jsonify(wifi_manager.status())
+    except WifiControlError:
+        return jsonify({"ok": False, "error": "Wi-Fi status is unavailable"}), 503
+
+
+@bp.route("/api/admin/wifi/networks", methods=["GET"])
+@admin_auth.require_admin
+def wifi_networks():
+    try:
+        return jsonify(wifi_manager.scan())
+    except WifiControlError:
+        return jsonify({"ok": False, "error": "Wi-Fi scan is unavailable"}), 503
+
+
+@bp.route("/api/admin/wifi/connect", methods=["POST"])
+@admin_auth.require_admin
+def wifi_connect():
+    data = request.get_json(silent=True) or {}
+    if data.get("confirm") != "CONNECT_WIFI":
+        return jsonify({"ok": False, "error": "Wi-Fi confirmation is required"}), 400
+
+    with lock:
+        if state["play_mode"] is not None:
+            return jsonify({"ok": False, "error": "Stop the current game first"}), 409
+        if not state["maintenance_mode"]:
+            return jsonify({"ok": False, "error": "Enter maintenance mode first"}), 409
+        try:
+            result = wifi_manager.connect(data.get("ssid"), data.get("password"))
+        except WifiValidationError as error:
+            return jsonify({"ok": False, "error": str(error)}), 400
+        except WifiControlError:
+            return jsonify({"ok": False, "error": "Wi-Fi connection failed"}), 503
+        operation = "completed" if result.get("executed") else "simulated"
+        add_event(f"Admin action: Wi-Fi connection request {operation}", "warning")
+        return jsonify(result)

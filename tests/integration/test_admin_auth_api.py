@@ -179,6 +179,93 @@ class AdminAuthApiTest(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 404)
 
+    def test_wifi_status_and_scan_require_admin_authentication(self):
+        for path in ("/api/admin/wifi/status", "/api/admin/wifi/networks"):
+            self.assertEqual(self.client.get(path).status_code, 401)
+
+        self.client.post("/api/admin/login", json={"pin": "2468"})
+
+        status = self.client.get("/api/admin/wifi/status")
+        networks = self.client.get("/api/admin/wifi/networks")
+        self.assertEqual(status.status_code, 200)
+        self.assertEqual(status.get_json()["mode"], "mock")
+        self.assertFalse(status.get_json()["executed"])
+        self.assertEqual(networks.status_code, 200)
+        self.assertEqual(networks.get_json()["networks"], [])
+
+    def test_wifi_connect_requires_auth_confirmation_idle_and_maintenance(self):
+        credentials = {
+            "ssid": "Workshop WiFi",
+            "password": "safe-password",
+            "confirm": "CONNECT_WIFI",
+        }
+        self.assertEqual(
+            self.client.post("/api/admin/wifi/connect", json=credentials).status_code,
+            401,
+        )
+
+        self.client.post("/api/admin/login", json={"pin": "2468"})
+        self.assertEqual(
+            self.client.post(
+                "/api/admin/wifi/connect",
+                json={"ssid": "Workshop WiFi", "password": "safe-password"},
+            ).status_code,
+            400,
+        )
+        self.assertEqual(
+            self.client.post("/api/admin/wifi/connect", json=credentials).status_code,
+            409,
+        )
+
+        state["maintenance_mode"] = True
+        state["play_mode"] = "test"
+        self.assertEqual(
+            self.client.post("/api/admin/wifi/connect", json=credentials).status_code,
+            409,
+        )
+
+        state["play_mode"] = None
+        response = self.client.post("/api/admin/wifi/connect", json=credentials)
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.get_json()["executed"])
+        self.assertNotIn("safe-password", response.get_data(as_text=True))
+
+    def test_wifi_connect_validates_credentials_without_echoing_password(self):
+        self.client.post("/api/admin/login", json={"pin": "2468"})
+        state["maintenance_mode"] = True
+
+        response = self.client.post(
+            "/api/admin/wifi/connect",
+            json={
+                "ssid": "Workshop WiFi",
+                "password": "short",
+                "confirm": "CONNECT_WIFI",
+            },
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertNotIn("short", response.get_data(as_text=True))
+
+    def test_wifi_helper_failures_return_redacted_service_errors(self):
+        from dashboard.backend.wifi_control import WifiControlError
+
+        self.client.post("/api/admin/login", json={"pin": "2468"})
+        with patch(
+            "dashboard.backend.routes_admin.wifi_manager.status",
+            side_effect=WifiControlError("private detail"),
+        ):
+            status = self.client.get("/api/admin/wifi/status")
+        with patch(
+            "dashboard.backend.routes_admin.wifi_manager.scan",
+            side_effect=WifiControlError("private detail"),
+        ):
+            scan = self.client.get("/api/admin/wifi/networks")
+
+        self.assertEqual(status.status_code, 503)
+        self.assertEqual(scan.status_code, 503)
+        self.assertNotIn("private detail", status.get_data(as_text=True))
+        self.assertNotIn("private detail", scan.get_data(as_text=True))
+
     def test_maintenance_requires_authenticated_session_and_confirmation(self):
         unauthorized = self.client.post(
             "/api/admin/maintenance",

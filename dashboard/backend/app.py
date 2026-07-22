@@ -10,6 +10,9 @@ from pathlib import Path
 from flask import Flask, jsonify
 from werkzeug.exceptions import HTTPException
 
+from analytics.api import create_analytics_blueprint
+from analytics.service import AnalyticsService
+from analytics.store import AnalyticsStore
 from dashboard.backend import dashboard_state
 from game.events import create_game_state_blueprint
 from game.state_engine import GameStateEngine, load_game_state_config
@@ -64,6 +67,13 @@ recommendation_engine = RecommendationEngine(
     runtime_status_provider=dashboard_state.runtime_controller.status,
     config=load_recommendation_config(),
 )
+analytics_service = AnalyticsService(
+    runtime_status_provider=dashboard_state.runtime_controller.status,
+    detection_cache=game_detection_cache,
+    game_state_cache=game_state_engine.state_cache,
+    recommendation_cache=recommendation_engine.recommendation_cache,
+    store=AnalyticsStore(max_events=_positive_int_env("CLAW_ANALYTICS_MAX_EVENTS", 1000)),
+)
 app.register_blueprint(system_bp)
 app.register_blueprint(admin_bp)
 app.register_blueprint(camera_bp)
@@ -72,6 +82,7 @@ app.register_blueprint(player_bp)
 app.register_blueprint(cloud_bp)
 app.register_blueprint(create_game_state_blueprint(game_state_engine))
 app.register_blueprint(create_recommendation_blueprint(recommendation_engine))
+app.register_blueprint(create_analytics_blueprint(analytics_service))
 runtime_controller = dashboard_state.runtime_controller
 
 

@@ -59,6 +59,11 @@ Dashboard and AI code must not access Arduino directly. They submit command mode
 - Machine state tracks running status, play timing, claw power, Arduino connection, mock mode, emergency stop, and faults.
 - Structured JSON logs cover commands, Arduino communication, and safety events.
 - Basic unit and integration tests run without Raspberry Pi GPIO or attached Arduino hardware.
+- Read-only machine analytics at `/analytics` provides bounded event history,
+  filters, summaries, and CSV export.
+- Admin Wi-Fi Stage 4 provides PIN-protected, maintenance-gated live scanning
+  and WPA/WPA2 Personal connection through the least-privilege helper, with
+  atomic configuration, automatic rollback, and pending-request protection.
 
 ## Phase A Supabase Cloud Integration
 
@@ -216,7 +221,8 @@ PROGRESS_CLAW_RUN_LIVE_TESTS=1 \
   .venv/bin/python -m unittest tests.live.cloud_live_test -v
 ```
 
-Latest verification on 2026-07-19: 127 automated tests passed. Supervised
+Latest verification on 2026-07-22: 162 automated tests passed and the explicitly
+opt-in live Supabase test was skipped. Supervised
 Raspberry Pi validation also confirmed real GPIO idle levels, Chromium kiosk
 recovery, and the protected reboot and shutdown workflows through the
 least-privilege power helper.
@@ -237,6 +243,11 @@ Architecture docs:
 - [docs/cloud/SUPABASE_SETUP.md](docs/cloud/SUPABASE_SETUP.md)
 - [docs/cloud/LIVE_VERIFICATION.md](docs/cloud/LIVE_VERIFICATION.md)
 - [docs/cloud/CLOUD_MONITORING.md](docs/cloud/CLOUD_MONITORING.md)
+- [docs/reports/sprint6_5_analytics_dashboard.md](docs/reports/sprint6_5_analytics_dashboard.md)
+- [docs/reports/admin_wifi_stage1.md](docs/reports/admin_wifi_stage1.md)
+- [docs/reports/admin_wifi_stage2_security_review.md](docs/reports/admin_wifi_stage2_security_review.md)
+- [docs/reports/admin_wifi_stage3_installation.md](docs/reports/admin_wifi_stage3_installation.md)
+- [docs/reports/admin_wifi_stage4_live_validation.md](docs/reports/admin_wifi_stage4_live_validation.md)
 
 ## Migration Status
 
@@ -256,6 +267,7 @@ The initial safe migration pass has been executed.
 ├── ai/              # AI models, vision logic, strategy, and training assets
 ├── camera/          # Camera capture, calibration, processing, and snapshots
 ├── cloud/           # Optional Supabase status synchronization
+├── analytics/       # Read-only operational event aggregation and reporting
 ├── dashboard/       # Operator dashboard frontend/backend structure
 ├── arduino/         # Arduino firmware, sketches, wiring, and protocols
 ├── system/          # Runtime services, supervisor config, and system logs
@@ -281,6 +293,11 @@ The initial safe migration pass has been executed.
 - Mock mode verifies backend command flow but cannot validate real motors, limit switches, relays, or timing behavior.
 - Phase A.1 cloud synchronization remains operator-triggered; automatic
   production scheduling and retention policy are not implemented yet.
+- Analytics history is bounded in memory and resets when the dashboard process
+  restarts; durable retention remains intentionally deferred.
+- Admin Wi-Fi supports WPA/WPA2 Personal networks only; enterprise usernames,
+  captive portals, open networks, WPA3-SAE-only networks, and static IP setup
+  are not implemented.
 
 ## Phase 5 Planned Kiosk Mode
 

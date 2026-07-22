@@ -1,0 +1,7 @@
+# Progress Claw Wi-Fi helper: exact action allowlist only. Validate with visudo -cf.
+araya ALL=(root) NOPASSWD: /usr/local/sbin/progress-claw-wifi status
+araya ALL=(root) NOPASSWD: /usr/local/sbin/progress-claw-wifi scan
+araya ALL=(root) NOPASSWD: /usr/local/sbin/progress-claw-wifi connect
+pi ALL=(root) NOPASSWD: /usr/local/sbin/progress-claw-wifi status
+pi ALL=(root) NOPASSWD: /usr/local/sbin/progress-claw-wifi scan
+pi ALL=(root) NOPASSWD: /usr/local/sbin/progress-claw-wifi connect

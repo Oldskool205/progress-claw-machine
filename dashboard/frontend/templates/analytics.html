@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Progress Claw Analytics</title>
+  <style>
+    :root { color-scheme:dark; --bg:#090b14; --panel:#171a2b; --ink:#f7f7fb; --muted:#9da3bc; --cyan:#19d9ff; --line:#30354e; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.45 system-ui,sans-serif; }
+    main { width:min(1200px,94vw); margin:32px auto; }
+    header { display:flex; align-items:center; justify-content:space-between; gap:16px; }
+    h1 { margin:0; font-size:clamp(24px,4vw,40px); }
+    a { color:var(--cyan); }
+    .cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin:24px 0; }
+    .card, .filters, .events { background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:18px; }
+    .metric { display:block; margin-top:7px; font-size:28px; font-weight:800; }
+    .filters { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; }
+    label { color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.08em; }
+    input,select,button { width:100%; margin-top:6px; min-height:42px; border:1px solid var(--line); border-radius:8px; padding:9px; color:var(--ink); background:#0d1020; }
+    button { cursor:pointer; background:#143445; border-color:#28738c; }
+    .actions { display:flex; align-items:end; gap:8px; }
+    .events { margin-top:12px; overflow:auto; }
+    table { width:100%; border-collapse:collapse; min-width:860px; }
+    th,td { padding:10px; text-align:left; border-bottom:1px solid var(--line); vertical-align:top; }
+    th { color:var(--muted); font-size:12px; text-transform:uppercase; }
+    td:last-child { max-width:340px; overflow-wrap:anywhere; }
+    .empty { color:var(--muted); text-align:center; padding:30px; }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div><h1>Machine Analytics</h1><div>Read-only runtime intelligence</div></div>
+      <a href="/">Back to machine control</a>
+    </header>
+    <section class="cards" aria-label="Analytics summary">
+      <div class="card">Events <span class="metric" id="totalEvents">—</span></div>
+      <div class="card">Safety events <span class="metric" id="safetyEvents">—</span></div>
+      <div class="card">Game states <span class="metric" id="gameEvents">—</span></div>
+      <div class="card">Avg confidence <span class="metric" id="avgConfidence">—</span></div>
+    </section>
+    <form id="filters" class="filters">
+      <label>Category
+        <select name="category"><option value="">All</option><option>runtime</option><option>vision</option><option>game_state</option><option>recommendation</option><option>safety</option></select>
+      </label>
+      <label>Event type <input name="event_type" placeholder="e.g. PLAYING"></label>
+      <label>Min confidence <input name="min_confidence" type="number" min="0" max="1" step="0.05"></label>
+      <label>Session <input name="session_id"></label>
+      <label>Start <input name="start" type="datetime-local"></label>
+      <label>End <input name="end" type="datetime-local"></label>
+      <div class="actions"><button type="submit">Apply</button><button id="export" type="button">Export CSV</button></div>
+    </form>
+    <section class="events">
+      <table>
+        <thead><tr><th>Time</th><th>Category</th><th>Event</th><th>Source</th><th>Confidence</th><th>Session</th><th>Details</th></tr></thead>
+        <tbody id="eventRows"><tr><td class="empty" colspan="7">Loading…</td></tr></tbody>
+      </table>
+    </section>
+  </main>
+  <script>
+    const filters = document.getElementById("filters");
+    function params() {
+      const result = new URLSearchParams();
+      new FormData(filters).forEach((value,key) => { if (value) result.set(key,value); });
+      return result;
+    }
+    function escapeText(value) {
+      const node = document.createElement("span"); node.textContent = value; return node.innerHTML;
+    }
+    async function refresh() {
+      const [summaryResponse, eventsResponse] = await Promise.all([
+        fetch("/analytics/summary", {cache:"no-store"}),
+        fetch(`/analytics/events?${params()}`, {cache:"no-store"})
+      ]);
+      const summary = await summaryResponse.json();
+      const payload = await eventsResponse.json();
+      if (!eventsResponse.ok) throw new Error(payload.error || "Analytics unavailable");
+      totalEvents.textContent = summary.total_events;
+      safetyEvents.textContent = summary.by_category.safety || 0;
+      gameEvents.textContent = summary.by_category.game_state || 0;
+      avgConfidence.textContent = summary.average_confidence == null ? "—" : `${Math.round(summary.average_confidence * 100)}%`;
+      eventRows.innerHTML = payload.events.length ? payload.events.map(event => `<tr>
+        <td>${escapeText(new Date(event.timestamp).toLocaleString())}</td><td>${escapeText(event.category)}</td>
+        <td>${escapeText(event.event_type)}</td><td>${escapeText(event.source)}</td>
+        <td>${event.confidence == null ? "—" : Math.round(event.confidence * 100) + "%"}</td>
+        <td>${escapeText(event.session_id || "—")}</td><td>${escapeText(JSON.stringify(event.details))}</td>
+      </tr>`).join("") : '<tr><td class="empty" colspan="7">No matching events</td></tr>';
+    }
+    filters.addEventListener("submit", event => { event.preventDefault(); refresh().catch(showError); });
+    document.getElementById("export").addEventListener("click", () => { location.href = `/analytics/export.csv?${params()}`; });
+    function showError(error) { eventRows.innerHTML = `<tr><td class="empty" colspan="7">${escapeText(error.message)}</td></tr>`; }
+    refresh().catch(showError);
+    setInterval(() => refresh().catch(showError), 5000);
+  </script>
+</body>
+</html>

@@ -344,6 +344,15 @@ Acceptance criteria:
 - Safety events and rejected AI requests are visible.
 - Existing runtime API behavior remains compatible with Phase 5 tests.
 
+Implementation status (2026-07-20): the read-only analytics foundation is
+implemented. A bounded in-memory event store aggregates public runtime status,
+vision detections, game-state events, recommendations, and current safety
+states. `/analytics` provides summary cards and event filters, while
+`/analytics/events`, `/analytics/summary`, and `/analytics/export.csv` expose
+GET-only data access. Durable history, background sampling, and upstream play
+session/outcome correlation remain deferred pending retention and privacy
+decisions. See `docs/reports/sprint6_5_analytics_dashboard.md`.
+
 ## Risks and Safety Rules
 
 ### Key Risks

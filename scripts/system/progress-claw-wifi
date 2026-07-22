@@ -1,0 +1,355 @@
+#!/usr/bin/env python3
+"""Least-privilege Wi-Fi helper for the reviewed Stage 2 design.
+
+This repository copy is not installed automatically. It manages only one
+marked WPA-PSK network block in the fixed wpa_supplicant configuration.
+"""
+
+from __future__ import annotations
+
+import fcntl
+import hashlib
+import json
+import os
+from pathlib import Path
+import signal
+import stat
+import subprocess
+import sys
+import tempfile
+import time
+from typing import Any, Callable
+
+
+WPA_CLI = "/sbin/wpa_cli"
+INTERFACE = "wlan0"
+CONFIG_PATH = Path("/etc/wpa_supplicant/wpa_supplicant.conf")
+BACKUP_PATH = Path("/var/lib/progress-claw/wifi/wpa_supplicant.conf.backup")
+LOCK_PATH = Path("/run/lock/progress-claw-wifi.lock")
+BEGIN_MARKER = "# BEGIN PROGRESS_CLAW_MANAGED_WIFI"
+END_MARKER = "# END PROGRESS_CLAW_MANAGED_WIFI"
+MANAGED_ID = "progress-claw-admin"
+MAX_INPUT_BYTES = 512
+CONNECT_ATTEMPTS = 25
+
+
+class HelperError(RuntimeError):
+    """Safe helper failure whose text never contains submitted credentials."""
+
+
+def validate_credentials(ssid: Any, password: Any) -> tuple[str, str]:
+    if not isinstance(ssid, str) or not ssid:
+        raise HelperError("invalid network name")
+    if any(ord(character) < 32 or ord(character) == 127 for character in ssid):
+        raise HelperError("invalid network name")
+    if len(ssid.encode("utf-8")) > 32:
+        raise HelperError("invalid network name")
+    if not isinstance(password, str):
+        raise HelperError("invalid password")
+    password_bytes = password.encode("utf-8")
+    if not 8 <= len(password_bytes) <= 63:
+        raise HelperError("invalid password")
+    if any(ord(character) < 32 or ord(character) == 127 for character in password):
+        raise HelperError("invalid password")
+    return ssid, password
+
+
+def read_connect_request(stream) -> tuple[str, str]:
+    raw = stream.read(MAX_INPUT_BYTES + 1)
+    if len(raw) > MAX_INPUT_BYTES:
+        raise HelperError("request is too large")
+    try:
+        payload = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise HelperError("invalid request") from error
+    if not isinstance(payload, dict) or set(payload) != {"ssid", "password"}:
+        raise HelperError("invalid request")
+    return validate_credentials(payload["ssid"], payload["password"])
+
+
+def derive_psk(ssid: str, password: str) -> str:
+    return hashlib.pbkdf2_hmac(
+        "sha1",
+        password.encode("utf-8"),
+        ssid.encode("utf-8"),
+        4096,
+        dklen=32,
+    ).hex()
+
+
+def managed_block(ssid: str, password: str) -> str:
+    ssid_hex = ssid.encode("utf-8").hex()
+    psk = derive_psk(ssid, password)
+    return "\n".join(
+        (
+            BEGIN_MARKER,
+            "network={",
+            f"    ssid={ssid_hex}",
+            f"    psk={psk}",
+            '    key_mgmt=WPA-PSK',
+            '    scan_ssid=1',
+            '    priority=100',
+            f'    id_str="{MANAGED_ID}"',
+            "}",
+            END_MARKER,
+        )
+    )
+
+
+def update_managed_block(existing: str, ssid: str, password: str) -> str:
+    start = existing.find(BEGIN_MARKER)
+    end = existing.find(END_MARKER)
+    if (start == -1) != (end == -1):
+        raise HelperError("managed configuration markers are inconsistent")
+    replacement = managed_block(ssid, password)
+    if start == -1:
+        return existing.rstrip() + "\n\n" + replacement + "\n"
+    if existing.find(BEGIN_MARKER, start + 1) != -1 or existing.find(
+        END_MARKER, end + 1
+    ) != -1:
+        raise HelperError("multiple managed configuration blocks found")
+    end += len(END_MARKER)
+    return existing[:start] + replacement + existing[end:]
+
+
+def atomic_write(path: Path, content: bytes) -> None:
+    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    descriptor, temporary_name = tempfile.mkstemp(
+        prefix=f".{path.name}.", dir=str(path.parent)
+    )
+    try:
+        os.fchmod(descriptor, 0o600)
+        with os.fdopen(descriptor, "wb") as output:
+            output.write(content)
+            output.flush()
+            os.fsync(output.fileno())
+        os.replace(temporary_name, path)
+        directory_fd = os.open(path.parent, os.O_DIRECTORY)
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
+    except Exception:
+        try:
+            os.unlink(temporary_name)
+        except FileNotFoundError:
+            pass
+        raise
+
+
+def validate_config_file(path: Path, *, require_root_owner: bool = True) -> None:
+    try:
+        file_status = path.lstat()
+    except FileNotFoundError as error:
+        raise HelperError("Wi-Fi configuration does not exist") from error
+    if not stat.S_ISREG(file_status.st_mode) or file_status.st_nlink != 1:
+        raise HelperError("Wi-Fi configuration is not a safe regular file")
+    if require_root_owner and file_status.st_uid != 0:
+        raise HelperError("Wi-Fi configuration is not root-owned")
+    if file_status.st_mode & 0o022:
+        raise HelperError("Wi-Fi configuration permissions are unsafe")
+
+
+def acquire_operation_lock(path: Path = LOCK_PATH):
+    path.parent.mkdir(mode=0o755, parents=True, exist_ok=True)
+    flags = os.O_CREAT | os.O_RDWR | os.O_CLOEXEC
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    try:
+        descriptor = os.open(path, flags, 0o600)
+    except OSError as error:
+        raise HelperError("Wi-Fi operation lock is unavailable") from error
+    try:
+        lock_status = os.fstat(descriptor)
+        if (
+            not stat.S_ISREG(lock_status.st_mode)
+            or lock_status.st_uid != 0
+            or lock_status.st_nlink != 1
+        ):
+            raise HelperError("Wi-Fi operation lock is unsafe")
+        os.fchmod(descriptor, 0o600)
+        try:
+            fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as error:
+            raise HelperError("another Wi-Fi operation is active") from error
+        return os.fdopen(descriptor, "a", encoding="utf-8")
+    except Exception:
+        os.close(descriptor)
+        raise
+
+
+def run_wpa_cli(action: str, timeout: int = 5) -> str:
+    if action not in {"status", "scan", "scan_results", "reconfigure"}:
+        raise HelperError("unsupported internal Wi-Fi action")
+    completed = subprocess.run(
+        [WPA_CLI, "-i", INTERFACE, action],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+    )
+    return completed.stdout
+
+
+def parse_status(output: str) -> dict[str, str]:
+    result = {}
+    for line in output.splitlines():
+        if "=" in line:
+            key, value = line.split("=", 1)
+            result[key] = value
+    return result
+
+
+def status_payload(runner: Callable[[str], str] = run_wpa_cli) -> dict[str, Any]:
+    status = parse_status(runner("status"))
+    connected = status.get("wpa_state") == "COMPLETED"
+    return {
+        "ok": True,
+        "mode": "live",
+        "executed": True,
+        "connected": connected,
+        "current_ssid": status.get("ssid") if connected else None,
+        "internet": None,
+        "message": "Wi-Fi connected" if connected else "Wi-Fi is not connected",
+    }
+
+
+def scan_payload(runner: Callable[[str], str] = run_wpa_cli) -> dict[str, Any]:
+    runner("scan")
+    output = runner("scan_results")
+    networks: dict[str, dict[str, Any]] = {}
+    for line in output.splitlines()[1:]:
+        fields = line.split("\t", 4)
+        if len(fields) != 5:
+            continue
+        _bssid, _frequency, signal, flags, ssid = fields
+        if not ssid or any(ord(character) < 32 for character in ssid):
+            continue
+        if not signal.lstrip("-").isdigit():
+            continue
+        candidate = {
+            "ssid": ssid,
+            "signal": int(signal),
+            "security": "secured" if "WPA" in flags else "open",
+        }
+        previous = networks.get(ssid)
+        if previous is None or (candidate["signal"] or -999) > (
+            previous["signal"] or -999
+        ):
+            networks[ssid] = candidate
+    ordered = sorted(
+        networks.values(), key=lambda item: item["signal"] or -999, reverse=True
+    )
+    return {
+        "ok": True,
+        "mode": "live",
+        "executed": True,
+        "networks": ordered,
+        "message": f"Found {len(ordered)} Wi-Fi networks",
+    }
+
+
+def connect_network(
+    ssid: str,
+    password: str,
+    *,
+    config_path: Path = CONFIG_PATH,
+    backup_path: Path = BACKUP_PATH,
+    runner: Callable[[str], str] = run_wpa_cli,
+    sleeper: Callable[[float], None] = time.sleep,
+    attempts: int = CONNECT_ATTEMPTS,
+    require_root_owner: bool = True,
+) -> dict[str, Any]:
+    validate_config_file(config_path, require_root_owner=require_root_owner)
+    original = config_path.read_bytes()
+    if len(original) > 1024 * 1024:
+        raise HelperError("Wi-Fi configuration is unexpectedly large")
+    try:
+        existing = original.decode("utf-8")
+    except UnicodeDecodeError as error:
+        raise HelperError("Wi-Fi configuration is not UTF-8") from error
+
+    updated = update_managed_block(existing, ssid, password).encode("utf-8")
+    if updated == original:
+        current_status = parse_status(runner("status"))
+        if (
+            current_status.get("wpa_state") == "COMPLETED"
+            and current_status.get("id_str") == MANAGED_ID
+        ):
+            return {
+                "ok": True,
+                "mode": "live",
+                "executed": True,
+                "connected": True,
+                "ssid": ssid,
+                "message": "Wi-Fi is already connected with these settings",
+            }
+    atomic_write(backup_path, original)
+    configuration_changed = False
+    try:
+        configuration_changed = True
+        atomic_write(config_path, updated)
+        runner("reconfigure")
+        for _attempt in range(attempts):
+            status = parse_status(runner("status"))
+            if (
+                status.get("wpa_state") == "COMPLETED"
+                and status.get("id_str") == MANAGED_ID
+            ):
+                return {
+                    "ok": True,
+                    "mode": "live",
+                    "executed": True,
+                    "connected": True,
+                    "ssid": ssid,
+                    "message": "Wi-Fi connection completed",
+                }
+            sleeper(1)
+        raise HelperError("Wi-Fi association timed out")
+    except BaseException as error:
+        if configuration_changed:
+            atomic_write(config_path, original)
+            try:
+                runner("reconfigure")
+            except Exception as rollback_error:
+                raise HelperError("Wi-Fi rollback could not be activated") from rollback_error
+        if isinstance(error, HelperError):
+            raise
+        raise HelperError("Wi-Fi connection failed and was rolled back") from error
+
+
+def emit(payload: dict[str, Any]) -> None:
+    sys.stdout.write(json.dumps(payload, sort_keys=True) + "\n")
+
+
+def _interrupt_operation(_signal_number, _frame) -> None:
+    raise HelperError("Wi-Fi operation interrupted")
+
+
+def main() -> int:
+    if os.geteuid() != 0:
+        print("progress-claw-wifi must run as root", file=sys.stderr)
+        return 77
+    if len(sys.argv) != 2 or sys.argv[1] not in {"status", "scan", "connect"}:
+        print("usage: progress-claw-wifi {status|scan|connect}", file=sys.stderr)
+        return 64
+
+    try:
+        signal.signal(signal.SIGTERM, _interrupt_operation)
+        signal.signal(signal.SIGINT, _interrupt_operation)
+        with acquire_operation_lock():
+            if sys.argv[1] == "status":
+                emit(status_payload())
+            elif sys.argv[1] == "scan":
+                emit(scan_payload())
+            else:
+                ssid, password = read_connect_request(sys.stdin.buffer)
+                emit(connect_network(ssid, password))
+        return 0
+    except Exception:
+        print("progress-claw-wifi operation failed", file=sys.stderr)
+        return 70
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
