@@ -50,7 +50,7 @@ def player_photo():
     temporary_path = f"{shared.PLAYER_PHOTO_PATH}.browser"
     people_count = count_people_in_photo(image)
     try:
-        save_yolo_raw_photo(image, player_name, captured_at, "browser", people_count)
+        archive_yolo_raw_photo(image, captured_at, "browser", people_count)
         labeled_image = label_player_photo(image, player_name)
         with open(temporary_path, "wb") as photo_file:
             photo_file.write(labeled_image)
@@ -121,7 +121,7 @@ def capture_player():
     temporary_path = f"{shared.PLAYER_PHOTO_PATH}.capture"
     people_count = count_people_in_photo(frame)
     try:
-        save_yolo_raw_photo(frame, player_name, captured_at, "camera", people_count)
+        archive_yolo_raw_photo(frame, captured_at, "camera", people_count)
         labeled_frame = label_player_photo(frame, player_name)
         with open(temporary_path, "wb") as photo_file:
             photo_file.write(labeled_frame)

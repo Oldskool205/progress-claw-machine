@@ -1,4 +1,4 @@
-path: /home/araya/Projects/Progress-Claw-OS/ai/training/yolo_people/dataset
+path: dataset
 train: images/train
 val: images/val
 test: images/test

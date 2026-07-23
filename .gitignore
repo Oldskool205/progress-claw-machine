@@ -107,6 +107,14 @@ data/snapshots/*
 !docs/**/*.jpeg
 !docs/**/*.webp
 
+# Dashboard player photos are private runtime data, never source assets.
+dashboard/assets/static/images/current-player.*
+dashboard/assets/static/images/players/*
+!dashboard/assets/static/images/players/.gitkeep
+
+# Human-image training data must live in approved private artifact storage.
+ai/training/yolo_people/dataset/images/**/*
+
 # AI / YOLO generated model weights and exports
 *.pt
 *.onnx

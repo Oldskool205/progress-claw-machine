@@ -1,9 +1,0 @@
-{
-  "player_name": "Art",
-  "captured_at": "2026-07-01T11:34:59.179801",
-  "source": "camera",
-  "ai_people_count": 1,
-  "label_class": "person",
-  "label_status": "unlabeled",
-  "notes": "Copy image into dataset/images split and create YOLO labels before training."
-}

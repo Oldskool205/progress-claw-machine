@@ -221,7 +221,7 @@ PROGRESS_CLAW_RUN_LIVE_TESTS=1 \
   .venv/bin/python -m unittest tests.live.cloud_live_test -v
 ```
 
-Latest verification on 2026-07-22: 162 automated tests passed and the explicitly
+Latest verification on 2026-07-23: 166 automated tests passed and the explicitly
 opt-in live Supabase test was skipped. Supervised
 Raspberry Pi validation also confirmed real GPIO idle levels, Chromium kiosk
 recovery, and the protected reboot and shutdown workflows through the
@@ -248,6 +248,8 @@ Architecture docs:
 - [docs/reports/admin_wifi_stage2_security_review.md](docs/reports/admin_wifi_stage2_security_review.md)
 - [docs/reports/admin_wifi_stage3_installation.md](docs/reports/admin_wifi_stage3_installation.md)
 - [docs/reports/admin_wifi_stage4_live_validation.md](docs/reports/admin_wifi_stage4_live_validation.md)
+- [docs/DATA_RETENTION.md](docs/DATA_RETENTION.md)
+- [docs/PROJECT_STATUS.md](docs/PROJECT_STATUS.md)
 
 ## Migration Status
 

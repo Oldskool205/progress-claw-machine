@@ -51,6 +51,9 @@ YOLO_RAW_PHOTO_DIR = os.getenv(
     "CLAW_YOLO_RAW_PHOTO_DIR",
     "/home/araya/Projects/Progress-Claw-OS/ai/training/yolo_people/raw_photos",
 )
+YOLO_RAW_PHOTO_ARCHIVE_ENABLED = os.getenv(
+    "CLAW_YOLO_ARCHIVE_PLAYER_PHOTOS", "0"
+).strip().lower() in {"1", "true", "yes", "on"}
 
 MIN_PLAY_DURATION_SECONDS = 10
 MAX_PLAY_DURATION_SECONDS = 180
@@ -231,14 +234,10 @@ def count_people_in_photo(frame):
     return sum(1 for weight in weights if float(weight) >= 0.35)
 
 
-def save_yolo_raw_photo(frame, player_name, captured_at, source, people_count):
+def save_yolo_raw_photo(frame, captured_at, source, people_count):
     os.makedirs(YOLO_RAW_PHOTO_DIR, exist_ok=True)
     timestamp = captured_at.strftime("%Y%m%d-%H%M%S")
-    safe_name = "".join(
-        character.lower() if character.isalnum() else "-" for character in player_name
-    ).strip("-")
-    safe_name = safe_name or "player"
-    base_name = f"{timestamp}-{safe_name}-{int(time.time() * 1000)}"
+    base_name = f"{timestamp}-capture-{int(time.time() * 1000)}"
     image_path = os.path.join(YOLO_RAW_PHOTO_DIR, f"{base_name}.jpg")
     metadata_path = os.path.join(YOLO_RAW_PHOTO_DIR, f"{base_name}.json")
 
@@ -246,7 +245,6 @@ def save_yolo_raw_photo(frame, player_name, captured_at, source, people_count):
         photo_file.write(frame)
 
     metadata = {
-        "player_name": player_name,
         "captured_at": captured_at.isoformat(),
         "source": source,
         "ai_people_count": people_count,
@@ -258,6 +256,14 @@ def save_yolo_raw_photo(frame, player_name, captured_at, source, people_count):
         json.dump(metadata, metadata_file, indent=2)
 
     return image_path
+
+
+def archive_yolo_raw_photo(frame, captured_at, source, people_count):
+    """Archive an anonymized training capture only after explicit local opt-in."""
+
+    if not YOLO_RAW_PHOTO_ARCHIVE_ENABLED:
+        return None
+    return save_yolo_raw_photo(frame, captured_at, source, people_count)
 
 
 def grabber_power_level(percent):

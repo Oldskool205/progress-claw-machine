@@ -36,17 +36,24 @@ yolo_people/
 
 ## Labeling Rule
 
-The dashboard automatically saves every accepted player photo into
-`raw_photos/` for future labeling. Each saved image has a matching metadata
-file:
+The dashboard training archive is disabled by default. Enable it locally only
+after consent and private retention/storage procedures are approved:
 
-```text
-raw_photos/20260701-103000-player-name-1780000000000.jpg
-raw_photos/20260701-103000-player-name-1780000000000.json
+```dotenv
+CLAW_YOLO_ARCHIVE_PLAYER_PHOTOS=1
 ```
 
-The JSON metadata records the player name, capture source, timestamp, and
-current OpenCV AI count. These raw photos are not training labels yet.
+When explicitly enabled, the dashboard saves an anonymized copy into
+`raw_photos/` for future labeling. Each image has matching metadata:
+
+```text
+raw_photos/20260701-103000-capture-1780000000000.jpg
+raw_photos/20260701-103000-capture-1780000000000.json
+```
+
+The JSON metadata records capture source, timestamp, and current OpenCV AI
+count. It does not record the player name. These raw photos are not training
+labels yet and must remain outside the public Git repository.
 
 Use one class only:
 
@@ -87,3 +94,6 @@ After training, copy the best model to:
 ```text
 ai/models/yolo_people/best.pt
 ```
+
+Human-image datasets and model artifacts require the consent, provenance,
+storage, and review controls in `docs/DATA_RETENTION.md`.

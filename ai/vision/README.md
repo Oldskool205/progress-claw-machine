@@ -9,14 +9,16 @@ player photo. The dashboard uses OpenCV HOG person detection after
 The people count updates `AI PEOPLE` in the dashboard. If `POWER MODE` is set
 to `AI Crowd Bonus`, it also updates the effective grabber hold power.
 
-Every accepted player photo is also copied to:
+The optional training archive can copy an anonymized player photo to:
 
 ```text
 ai/training/yolo_people/raw_photos/
 ```
 
-This folder is the collection source for future YOLO labeling/training. A JSON
-metadata file is saved beside each image.
+This behavior is disabled by default and requires
+`CLAW_YOLO_ARCHIVE_PLAYER_PHOTOS=1` plus an approved consent and private-storage
+workflow. A JSON metadata file without the player name is saved beside each
+image. See `docs/DATA_RETENTION.md`.
 
 Future live people counters can send updated counts to the dashboard:
 

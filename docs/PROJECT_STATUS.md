@@ -1,112 +1,117 @@
 # Project Status
 
-Last updated: 2026-07-16
+Last updated: 2026-07-23
 
 ## Current Phase
 
-Progress Claw OS has moved beyond the original Phase 2 scaffold. The repository
-now contains a working local dashboard, matched Arduino firmware, camera capture
-support, and an early YOLO people-count training pipeline.
+Progress Claw OS is a working Raspberry Pi claw-machine platform in supervised
+prototype/integration status. Phase 5 runtime hardening and protected kiosk
+administration are implemented. Phase 6 vision, game-state, recommendation, and
+read-only analytics foundations are also implemented.
 
-The project is still in prototype/integration status. It should be treated as
-hardware-facing software that requires supervised testing on the actual machine
-before unattended operation.
+The project is hardware-facing software. Physical movement, emergency, power,
+touchscreen, and network changes require supervised validation before unattended
+operation.
 
-## Implemented
+## Runtime and Safety
 
-- Flask dashboard backend in `dashboard/backend/app.py`.
-- Browser dashboard UI in `dashboard/frontend/templates/index.html`.
-- Static dashboard assets and player photo history under `dashboard/assets/`.
-- Raspberry Pi GPIO dashboard play gate on BCM GPIO 17 to Arduino A0.
-- Raspberry Pi GPIO grabber hold-power selection on BCM GPIO 22/23/24 to
-  Arduino A1/A2/A3.
-- Matched Arduino sketch in `arduino/sketches/arduino_claw/arduino_claw.ino`.
-- FlySky iBus movement retained on Arduino during dashboard-approved play
-  windows.
-- Dashboard-required player registration/photo before starting a play.
-- Direct dashboard control screen with no app-shell cache blocking current UI.
-- Test Start control that can send the dashboard play gate without a player
-  photo.
-- Player photo stamping, history, and raw photo capture for AI training.
-- USB camera and Pi camera MJPEG streaming path.
-- OpenCV HOG people-count fallback for captured photos.
-- AI Crowd Bonus grabber power mapping:
-  - 0-1 people: 60%
-  - 2-3 people: 70%
-  - 4 people: 80%
-  - 5+ people: 90%
-- YOLO people dataset structure, raw photos, labeled sample images, training
-  outputs, and deployment model location under `ai/models/yolo_people/best.pt`.
-- Runtime dependencies listed in `requirements.txt`.
-- Optional failure-safe Supabase machine-status synchronization under `cloud/`.
-- Diagnostic-only cloud monitoring at `/cloud` and cached health at
-  `/cloud/health`.
-- Dashboard header Supabase status badge linked to the Phase A cloud monitor.
-- Simplified operator dashboard focused on player registration and machine
-  control, without Hacker Mode, reward metrics, player history, or activity
-  panels.
-- Explicit cloud CLI diagnostics and an opt-in live lifecycle test using the
-  isolated `CLOUD-DIAGNOSTIC-TEST` row.
-- Automated unit and integration coverage for controller, vision, game state,
-  recommendations, dashboard runtime, and cloud monitoring behavior.
+- `main.py` is the production entry point used by `claw-dashboard.service`.
+- `RuntimeController` owns the hardware safety boundary.
+- Dashboard play, stop, claw-power, and emergency-stop routes submit controller
+  command models rather than opening Arduino transport directly.
+- The deployed GPIO adapter controls the active-low play gate and grabber power
+  selection for the current Arduino firmware.
+- Mock transport remains available for hardware-independent automated tests.
+- Structured command, Arduino, safety, system, game-state, recommendation, and
+  cloud logs are available.
 
-## Hardware Integration Notes
+## Dashboard and Protected Administration
 
-- Dashboard play control is active-low: the Raspberry Pi holds Arduino A0 low
-  during a play window and releases it to stop.
-- Arduino D5 drives the grabber MOSFET/driver PWM control input.
-- Manual mode and AI Crowd Bonus mode both update the effective grabber hold
-  power shown on the dashboard and sent over GPIO 22/23/24.
-- Startup, natural Time Up, and dashboard Stop request full-power grabber pulse
-  sequences.
-- Movement and grabber hold remain disabled when the dashboard gate is closed.
-- The Arduino enforces a 180-second dashboard play safety timeout.
-- The Raspberry Pi uses 3.3 V GPIO; do not connect 5 V Arduino outputs to
-  Raspberry Pi GPIO inputs.
+- The dashboard provides player registration, camera preview, play timing,
+  machine settings, claw-power selection, cloud status, and analytics access.
+- Chromium kiosk startup and recovery run independently from the dashboard.
+- Short-lived Admin PIN sessions protect maintenance, game stop, kiosk exit and
+  restart, Raspberry Pi reboot and shutdown, and Wi-Fi administration.
+- Power and Wi-Fi operations use installed root-owned least-privilege helpers
+  with exact sudoers action allowlists.
+- Live WPA/WPA2 Personal scanning, connection, automatic rollback, and internet
+  recovery were validated under supervision on 2026-07-22.
+- Full touchscreen validation remains deferred until a data-capable absolute
+  touchscreen interface is available and recognized by Linux.
 
-## Known Gaps
+## Phase 6 Intelligence
 
-- `main.py` is still a placeholder and does not start the runtime system.
-- Controller, service supervisor, deployment, maintenance, and API modules are
-  mostly documentation placeholders.
-- Dashboard hardware access currently lives directly in the dashboard backend;
-  the planned controller safety boundary has not been extracted yet.
-- Runtime state is in memory and resets when the dashboard process restarts.
-- Player photos, raw AI captures, training runs, caches, and model artifacts are
-  present in the repository tree and need a retention/source-control policy.
-- Automated tests use mock GPIO/Arduino and Supabase clients; physical hardware
-  safety flows still require supervised Raspberry Pi and Arduino testing.
-- AI detection in the dashboard uses OpenCV HOG; the trained YOLO model is
-  present but is not yet wired into the dashboard runtime path.
-- Dashboard styling and frontend code are currently contained in a single HTML
-  template.
+- Vision Service provides camera, snapshot, frame queue, YOLO detection,
+  detection-cache, and health boundaries.
+- Game State Engine converts public runtime and detection inputs into
+  conservative cached state events.
+- Recommendation Engine produces explainable informational recommendations
+  without controlling hardware.
+- Read-only analytics aggregates bounded runtime, safety, vision, game-state,
+  and recommendation events with filters and CSV export.
+- AI-generated action execution and autonomous mode are not enabled.
 
-## Immediate Next Steps
+## Cloud
 
-1. Decide whether `dashboard/backend/app.py` remains the temporary runtime entry
-   point or whether `main.py` should start the dashboard and future services.
-2. Move hardware command decisions behind a controller API so dashboard and AI
-   code cannot directly bypass safety rules.
-3. Extend automated dashboard coverage to settings validation, hacker mode
-   lockout, and photo validation.
-4. Add `.gitignore` rules or data-management documentation for generated player
-   photos, raw captures, YOLO caches, training runs, and model files.
-5. Wire the trained YOLO people model into the dashboard or document why OpenCV
-   HOG remains the active runtime detector.
-6. Create deployment/service instructions for running the dashboard reliably on
-   the Raspberry Pi.
-7. Keep cloud synchronization opt-in until production scheduling, retention,
-   and least-privilege Supabase policies are approved.
+- Supabase integration is optional and outside the machine-control path.
+- Explicit diagnostics and isolated live-row lifecycle testing are implemented.
+- Dashboard health polling uses cached credential-free status.
+- Automatic production synchronization, retention, and final least-privilege
+  policies remain deferred.
 
-## Current Run Command
+## Verification Baseline
 
-```bash
-cd /home/araya/Projects/Progress-Claw-OS/dashboard/backend
-python3 app.py
-```
-
-Then open:
+Latest full automated verification before this documentation update:
 
 ```text
-http://localhost:5000
+166 passed, 1 skipped
+```
+
+The skipped test is the explicitly opt-in live Supabase lifecycle test.
+Supervised validations also cover real GPIO idle levels, kiosk recovery,
+protected reboot and shutdown, Admin Wi-Fi association, rollback, dashboard
+recovery, and internet connectivity.
+
+## Remaining Work
+
+1. Complete supervised touchscreen calibration and protected-control validation
+   when Linux detects a real touchscreen interface.
+2. Review and remove the host's broader pre-existing `NOPASSWD: ALL` rule,
+   retaining only reviewed helper permissions.
+3. Persist safety-critical runtime state conservatively across dashboard
+   restarts, especially emergency-stop and maintenance state.
+4. Complete physical motor, limit-switch, claw, play-timing, fault, and
+   emergency-stop validation under supervision.
+5. Add explicit, opt-in AI action requests through Runtime API and
+   `RuntimeController`, including stale-data, confidence, manual-lockout, fault,
+   and emergency-stop gates.
+6. Add bounded durable analytics, play/session identifiers, outcomes, and
+   background collection after approving privacy and retention limits.
+7. Consolidate dashboard people counting with the YOLO Vision Service or retain
+   OpenCV HOG as a documented fallback.
+8. Approve or decline scheduled Supabase synchronization, retention, and final
+   least-privilege Row Level Security.
+9. Apply the repository data-retention policy and review whether previously
+   published human images require a coordinated Git-history rewrite.
+
+## Run and Service
+
+Development/mock command:
+
+```bash
+cd /home/araya/Projects/Progress-Claw-OS
+CLAW_ARDUINO_MOCK=1 .venv/bin/python main.py
+```
+
+Production is managed by:
+
+```text
+claw-dashboard.service
+progress-claw-kiosk.service
+```
+
+Dashboard URL on the Raspberry Pi:
+
+```text
+http://localhost:5000/
 ```
